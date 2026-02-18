@@ -98,30 +98,29 @@ impl EntityHandler {
     /// applies tthe drop events
     fn execute(mut self: ResMut<Self>, mut commands: Commands) {
         while let Ok(event) = self.drop_intent_rx.try_recv() {
-            commands
-                .entity(event.entity)
-                .remove_by_id(event.intent_component);
-
             // only remove droped handles (maybe got set again by regaining handle)
             if self
                 .intent_handles
                 .get(&(event.entity, event.intent_component))
                 .map_or_default(|h| h.upgrade().is_none())
             {
+                commands
+                    .entity(event.entity)
+                    .remove_by_id(event.intent_component);
+
                 self.intent_handles
                     .remove(&(event.entity, event.intent_component));
             }
         }
 
         while let Ok(event) = self.drop_entity_rx.try_recv() {
-            commands.entity(event.0).despawn();
-
             // only remove droped handles (maybe got set again by regaining handle)
             if self
                 .entity_handles
                 .get(&event.0)
                 .map_or_default(|h| h.upgrade().is_none())
             {
+                commands.entity(event.0).despawn();
                 self.entity_handles.remove(&event.0);
             }
         }
@@ -205,21 +204,32 @@ impl<'w, 's> EntityServer<'w, 's> {
             .commands
             .spawn((bundle, IntentMarker::<Intent>::new()))
             .id();
-        EntityHandle::new(
+
+        let entity_handle = Arc::new(StrongEntityHandle {
             entity,
-            Arc::new(StrongEntityHandle {
-                entity,
-                drop_queue: self.handler.drop_entity_tx.clone(),
-            }),
-            Arc::new(StrongEntityIntentHandle {
-                entity,
-                intent_component: *self
-                    .intent_registry
-                    .get(&TypeId::of::<Intent>())
-                    .expect("register intent before spawning entities with it"),
-                drop_queue: self.handler.drop_intent_tx.clone(),
-            }),
-        )
+            drop_queue: self.handler.drop_entity_tx.clone(),
+        });
+
+        let intent_component = *self
+            .intent_registry
+            .get(&TypeId::of::<Intent>())
+            .expect("register intent before spawning entities with it");
+
+        let intent_handle = Arc::new(StrongEntityIntentHandle {
+            entity,
+            intent_component,
+            drop_queue: self.handler.drop_intent_tx.clone(),
+        });
+
+        self.handler
+            .entity_handles
+            .insert(entity, Arc::downgrade(&entity_handle));
+
+        self.handler
+            .intent_handles
+            .insert((entity, intent_component), Arc::downgrade(&intent_handle));
+
+        EntityHandle::new(entity, entity_handle, intent_handle)
     }
 
     /// Converts an existing entity to be managed by the handler, returns a handle to it. The entity will be despawned when all handles to it are dropped.
