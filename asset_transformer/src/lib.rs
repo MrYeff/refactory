@@ -4,54 +4,101 @@ use bevy_app::{App, Plugin, PostUpdate};
 use bevy_asset::{Asset, Assets, Handle};
 use bevy_ecs::{
     component::Component,
-    prelude::{Commands, Entity, In, IntoSystem, Mut, Res, Resource, World},
-    system::{Command, SystemId, SystemParam},
+    prelude::{Commands, Entity, IntoSystem, Mut, Res, Resource, World},
+    system::{Command, FromInput, SystemId, SystemInput, SystemParam},
 };
 use bevy_platform::collections::HashSet;
 
 pub mod prelude {
-    pub use super::{AssetTransformer, AssetTransformerPlugin};
+    pub use super::{HandleTransformer, HandleTransformerPlugin, TransformerInput};
 }
 
-/// Plugin that provides the [`AssetTransformer`] system param, which can be used to create new assets from existing ones via custom systems.
-/// Systems must have the signature |In<(Handle<AssetIn>, Params)>, ...| -> AssetOut. ...can be any valid system params.
-/// It can be assumed that the handle already has loaded.
+/// Actual parameter type received by user transformer systems.
 ///
+/// Example:
+/// ```
+/// fn convert_texture_format(input: TransformerInput<'_, Image, TextureFormat>) -> Image {
+///     input.asset.convert(input.params).unwrap()
+/// }
+/// ```
+pub struct TransformerInput<'a, T, P = ()> {
+    pub asset: &'a T,
+    pub params: P,
+}
+
+/// Marker type used in `IntoSystem<TransformerInputMarker<S, P>, TOut, M>`
+pub struct TransformerInputMarker<T, P>(PhantomData<fn() -> (T, P)>);
+
+/// Make the actual param type itself a valid `SystemInput` (passthrough).
+impl<'a, T: 'static, P: 'static> SystemInput for TransformerInput<'a, T, P> {
+    type Param<'i> = TransformerInput<'i, T, P>;
+    type Inner<'i> = TransformerInput<'i, T, P>;
+
+    fn wrap(this: Self::Inner<'_>) -> Self::Param<'_> {
+        this
+    }
+}
+
+/// Allow functions taking `TransformerInput<'_, T, P>` to be used where the system input is
+/// `TransformerInputMarker<T, P>`.
+impl<'a, T: 'static, P: 'static> FromInput<TransformerInputMarker<T, P>>
+    for TransformerInput<'a, T, P>
+{
+    fn from_inner<'i>(
+        (params, asset): <TransformerInputMarker<T, P> as SystemInput>::Inner<'i>,
+    ) -> <Self as SystemInput>::Inner<'i> {
+        TransformerInput { asset, params }
+    }
+}
+
+/// The marker itself is the "declared" system input type used in `run_system_cached_with`.
+impl<T: 'static, P: 'static> SystemInput for TransformerInputMarker<T, P> {
+    type Param<'i> = TransformerInput<'i, T, P>;
+    type Inner<'i> = (P, &'i T);
+
+    fn wrap((params, asset): Self::Inner<'_>) -> Self::Param<'_> {
+        TransformerInput { asset, params }
+    }
+}
+
+/// Plugin that provides the [`HandleTransformer`] system param, which can be used to create new handles from existing ones via user-defined asset transformer systems.
+/// Systems must have the signature `fn(TransformerInput<AssetIn, Params>, ...) -> AssetOut`.
+/// `...` can be any valid system params.
+//////
 /// Example Transformer System:
 /// ```
 /// fn convert_texture_format(
-///   In((handle, fmt)): In<(Handle<Image>, TextureFormat)>,
-///   assets: Res<Assets<Image>>,
+///     input: TransformerInput<Image, TextureFormat>,
 /// ) -> Image {
-///  assets.get(&handle).expect("handle has loaded").convert(fmt).unwrap()
+///     input.asset.convert(input.params).unwrap()
 /// }
 /// ```
-pub struct AssetTransformerPlugin;
+pub struct HandleTransformerPlugin;
 
-impl Plugin for AssetTransformerPlugin {
+impl Plugin for HandleTransformerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TransformerSystems>()
             .add_systems(PostUpdate, run_transformer_systems);
     }
 }
 
-/// System Param used to create new assets from existing ones via custom systems. Reference [`AssetTransformerPlugin`] for more information.
+/// System Param used to create new handles from existing ones via an asset transformer system. Reference [`HandleTransformerPlugin`] for more information.
 #[derive(SystemParam)]
-pub struct AssetTransformer<'w, 's, T: Asset> {
+pub struct HandleTransformer<'w, 's, T: Asset> {
     commands: Commands<'w, 's>,
     assets: Res<'w, Assets<T>>,
 }
 
-impl<'w, 's, T: Asset> AssetTransformer<'w, 's, T> {
-    pub fn transform_handle_with_params<S, C, P, M>(
+impl<'w, 's, T: Asset> HandleTransformer<'w, 's, T> {
+    pub fn transform_with_params<S, C, P, M>(
         &mut self,
         input: Handle<S>,
-        transformer: C,
         params: P,
+        transformer: C,
     ) -> Handle<T>
     where
         S: Asset,
-        C: IntoSystem<In<(Handle<S>, P)>, T, M> + Copy + Send + Sync + 'static,
+        C: IntoSystem<TransformerInputMarker<S, P>, T, M> + Copy + Send + Sync + 'static,
         P: Send + Sync + 'static,
         T: Asset + Send + Sync + 'static,
         M: Send + Sync + 'static,
@@ -68,14 +115,14 @@ impl<'w, 's, T: Asset> AssetTransformer<'w, 's, T> {
         output
     }
 
-    pub fn transform_handle<S, C, M>(&mut self, input: Handle<S>, transformer: C) -> Handle<T>
+    pub fn transform<S, C, M>(&mut self, input: Handle<S>, transformer: C) -> Handle<T>
     where
         S: Asset,
-        C: IntoSystem<In<(Handle<S>, ())>, T, M> + Copy + Send + Sync + 'static,
+        C: IntoSystem<TransformerInputMarker<S, ()>, T, M> + Copy + Send + Sync + 'static,
         T: Asset + Send + Sync + 'static,
         M: Send + Sync + 'static,
     {
-        self.transform_handle_with_params(input, transformer, ())
+        self.transform_with_params(input, (), transformer)
     }
 }
 
@@ -85,15 +132,14 @@ struct TransformRequest<S, T, C, P, M>
 where
     S: Asset,
     T: Asset,
-    // Pass handle; the system borrows the asset via `Res<Assets<S>>`.
-    C: IntoSystem<In<(Handle<S>, P)>, T, M> + Copy,
+    C: IntoSystem<TransformerInputMarker<S, P>, T, M> + Copy,
     P: 'static,
 {
     handle_in: Handle<S>,
     handle_out: Handle<T>,
     /// should never be none just here for later take!
     params: Option<P>,
-    system: C, // TODO
+    system: C,
     phantom: PhantomData<fn() -> M>,
 }
 
@@ -101,7 +147,7 @@ impl<S, T, C, P, M> TransformRequest<S, T, C, P, M>
 where
     S: Asset,
     T: Asset,
-    C: IntoSystem<In<(Handle<S>, P)>, T, M> + Copy + Send + Sync + 'static,
+    C: IntoSystem<TransformerInputMarker<S, P>, T, M> + Copy + Send + Sync + 'static,
     P: Send + Sync + 'static,
     M: Send + Sync + 'static,
 {
@@ -162,10 +208,16 @@ where
                 )
             };
 
-            // Run transformer system (borrows input via Assets<S> inside the system)
-            let output: T = world
-                .run_system_cached_with(system, (handle_in, params))
-                .unwrap();
+            // Borrow the source asset and pass it through TransformerInputMarker<S, P>
+            let output: T = world.resource_scope(|world, assets_in: Mut<Assets<S>>| {
+                let asset = assets_in
+                    .get(&handle_in)
+                    .expect("transform input handle was ready but asset is now missing");
+
+                world
+                    .run_system_cached_with(system, (params, asset))
+                    .unwrap()
+            });
 
             world
                 .resource_mut::<Assets<T>>()
@@ -182,7 +234,7 @@ impl<S, T, C, P, M> Command for TransformRequest<S, T, C, P, M>
 where
     S: Asset,
     T: Asset,
-    C: IntoSystem<In<(Handle<S>, P)>, T, M> + Copy + Send + Sync + 'static,
+    C: IntoSystem<TransformerInputMarker<S, P>, T, M> + Copy + Send + Sync + 'static,
     P: Send + Sync + 'static,
     M: Send + Sync + 'static,
 {
