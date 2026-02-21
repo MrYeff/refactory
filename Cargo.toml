@@ -1,5 +1,5 @@
 [workspace]
-members = ["game"]
+members = ["atlas", "entity_handle", "game"] # "yml_sub_asset"
 resolver = "3"
 
 [profile.dev]

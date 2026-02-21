@@ -1,0 +1,6 @@
+tile_size: [32, 32]
+objects:
+  ground:
+    offset: [0, 0]
+  wall:
+    offset: [0, 1]

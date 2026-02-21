@@ -4,15 +4,26 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = "0.18"
+bevy = { version = "0.18", features = ["debug"] }
+bevy_common_assets = { version = "0.14.0", features = ["yaml"] }
+bevy_mod_index = "0.9.0"
+derive_more = { version = "2.1.1", features = ["deref", "deref_mut", "from"] }
+itertools = "0.14.0"
 log = { version = "0.4", features = [
     "max_level_debug",
     "release_max_level_warn",
 ] }
+moonshine-kind = "0.4.2"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_with = { version = "3.16.1", features = ["time_0_3"] }
 tracing = { version = "0.1", features = [
     "max_level_debug",
     "release_max_level_warn",
 ] }
+
+# my crates
+entity_handle = { path = "../entity_handle" }
+strum = { version = "0.27.2", features = ["derive"] }
 
 [lints.clippy]
 too_many_arguments = "allow"

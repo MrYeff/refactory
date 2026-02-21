@@ -1,0 +1,12 @@
+enemies:
+  goblin:
+    hp: 10
+    name: "Goblin"
+  troll:
+    hp: 50
+    name: "Troll"
+
+list_example:
+  - "a"
+  - "b"
+  - "c"

@@ -1,0 +1,10 @@
+tile_size: [32, 32]
+objects:
+  belt:
+    animation:
+      frame_duration: 0.15
+      stride: [1, 0]
+      count: 4
+    rotation:
+      stride: [0, 1]
+      count: 4
