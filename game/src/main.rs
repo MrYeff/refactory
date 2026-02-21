@@ -1,16 +1,9 @@
-#![feature(try_trait_v2)]
-use std::{
-    ops::{DerefMut, Try},
-    process::exit,
-};
+use std::{marker::PhantomData, process::exit};
 
 use bevy::{
-    ecs::system::{CachedSystemId, SystemId, SystemParam},
-    platform::collections::HashSet,
-    prelude::*,
+    ecs::system::SystemId, platform::collections::HashSet, prelude::*,
     render::render_resource::TextureFormat,
 };
-use itertools::structs;
 
 // Handle<Image> -> Handle<Image>
 // Handle<AnyConfig> -> Handle<Enemy>
@@ -22,68 +15,111 @@ use itertools::structs;
 
 // CORE
 
-trait AssetConverter<S: Asset, T: Asset, P = ()> {
-    fn convert(params: P, input: &S) -> T;
-}
-
 #[derive(Component)]
-struct ConvertRequest<S, T, C, P = ()>
+struct ConvertRequest<S, T, C, P, M>
 where
     S: Asset,
     T: Asset,
-    C: AssetConverter<S, T, P>, // TODO replace with system
+    // Pass handle; the system borrows the asset via `Res<Assets<S>>`.
+    C: IntoSystem<In<(P, Handle<S>)>, T, M> + Copy,
+    P: 'static,
 {
     handle_in: Handle<S>,
     handle_out: Handle<T>,
     /// should never be none just here for later take!
     params: Option<P>,
-    phantom: std::marker::PhantomData<fn() -> C>,
+    system: C, // TODO
+    phantom: PhantomData<fn() -> M>,
 }
 
-impl<S, T, C, P> ConvertRequest<S, T, C, P>
+impl<S, T, C, P, M> ConvertRequest<S, T, C, P, M>
 where
     S: Asset,
     T: Asset,
-    C: AssetConverter<S, T, P> + Send + Sync + 'static,
+    C: IntoSystem<In<(P, Handle<S>)>, T, M> + Copy + Send + Sync + 'static,
     P: Send + Sync + 'static,
+    M: Send + Sync + 'static,
 {
-    fn new(handle_in: Handle<S>, handle_out: Handle<T>, params: P) -> Self {
+    fn new(handle_in: Handle<S>, handle_out: Handle<T>, params: P, system: C) -> Self {
         Self {
             handle_in,
             handle_out,
             params: Some(params),
-            phantom: std::marker::PhantomData,
+            system,
+            phantom: PhantomData,
         }
     }
 
     /// returns if should be run again
-    fn execute(
-        mut entries: Query<(Entity, &mut Self)>,
-        mut assets: ParamSet<(Res<Assets<S>>, ResMut<Assets<T>>)>,
-        mut commands: Commands,
-    ) -> bool {
-        if entries.is_empty() {
+    fn execute(world: &mut World) -> bool {
+        // Pass 1: immutable scan (safe to read Assets + components together)
+        let (has_any, ready): (bool, Vec<Entity>) = {
+            let mut q = world.query::<(Entity, &Self)>();
+            let assets_in = world.resource::<Assets<S>>();
+
+            let mut any = false;
+            let mut ready = Vec::new();
+
+            q.iter(world).for_each(|(e, req)| {
+                any = true;
+
+                // Only proceed once input is available AND we still have params to consume.
+                if req.params.is_some() && assets_in.get(&req.handle_in).is_some() {
+                    ready.push(e);
+                }
+            });
+
+            (any, ready)
+        };
+
+        // If there are no requests of this concrete type, stop running this system.
+        if !has_any {
             return false;
         }
 
-        entries.iter_mut().for_each(|(e, mut req)| {
-            if let Some(input) = assets.p0().get(&req.handle_in) {
-                let output = C::convert(req.params.take().unwrap(), input);
-                assets.p1().insert(req.handle_out.id(), output).unwrap();
-                commands.entity(e).despawn(); // done
-            }
+        // Nothing ready yet, but there are pending requests -> keep running.
+        if ready.is_empty() {
+            return true;
+        }
+
+        // Pass 2: mutable per-entity work (no query iter_mut, so we can touch world freely)
+        ready.into_iter().for_each(|e| {
+            // Pull what we need out of the component (consuming params once)
+            let (out_id, params, handle_in, system) = {
+                let mut ent = world.entity_mut(e);
+                let mut req = ent.get_mut::<Self>().unwrap();
+
+                (
+                    req.handle_out.id(),
+                    req.params.take().unwrap(),
+                    req.handle_in.clone(),
+                    req.system,
+                )
+            };
+
+            // Run converter system (borrows input via Assets<S> inside the system)
+            let output: T = world
+                .run_system_cached_with(system, (params, handle_in))
+                .unwrap();
+
+            world
+                .resource_mut::<Assets<T>>()
+                .insert(out_id, output)
+                .unwrap();
+            world.despawn(e); // done
         });
 
         true
     }
 }
 
-impl<S, T, C, P> Command for ConvertRequest<S, T, C, P>
+impl<S, T, C, P, M> Command for ConvertRequest<S, T, C, P, M>
 where
     S: Asset,
     T: Asset,
-    C: AssetConverter<S, T, P> + Send + Sync + 'static,
+    C: IntoSystem<In<(P, Handle<S>)>, T, M> + Copy + Send + Sync + 'static,
     P: Send + Sync + 'static,
+    M: Send + Sync + 'static,
 {
     fn apply(self, world: &mut World) -> () {
         world.commands().spawn(self);
@@ -105,12 +141,11 @@ fn run_converter_systems(world: &mut World) {
 
 // CONTENT
 
-struct TextureFormatConverter(());
-
-impl AssetConverter<Image, Image, TextureFormat> for TextureFormatConverter {
-    fn convert(fmt: TextureFormat, input: &Image) -> Image {
-        input.convert(fmt).unwrap()
-    }
+fn convert_texture_format(
+    In((fmt, handle)): In<(TextureFormat, Handle<Image>)>,
+    assets: Res<Assets<Image>>,
+) -> Image {
+    assets.get(&handle).unwrap().convert(fmt).unwrap()
 }
 
 // EXAMPLE
@@ -126,17 +161,18 @@ fn foo1(
     let handle_out = handle_out.get_or_insert_with(|| {
         let h = assets.reserve_handle();
 
-        commands.queue(ConvertRequest::<_, _, TextureFormatConverter, _>::new(
+        commands.queue(ConvertRequest::new(
             handle_in.clone(),
             h.clone(),
             TextureFormat::R8Unorm,
+            convert_texture_format,
         ));
         h
     });
 
     if let Some(_) = assets.get(handle_out) {
         println!("conversion complete!");
-        exit(0); // done
+        exit(0); // done    
     }
 }
 
