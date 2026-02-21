@@ -221,17 +221,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "asset_transformer"
-version = "0.1.0"
-dependencies = [
- "bevy 0.18.0",
- "bevy_app 0.18.0",
- "bevy_asset 0.18.0",
- "bevy_ecs 0.18.0",
- "bevy_platform 0.18.0",
-]
-
-[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3189,6 +3178,17 @@ dependencies = [
  "crunchy",
  "num-traits",
  "zerocopy",
+]
+
+[[package]]
+name = "handle_transformer"
+version = "0.1.0"
+dependencies = [
+ "bevy 0.18.0",
+ "bevy_app 0.18.0",
+ "bevy_asset 0.18.0",
+ "bevy_ecs 0.18.0",
+ "bevy_platform 0.18.0",
 ]
 
 [[package]]

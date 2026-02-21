@@ -1,4 +1,4 @@
-use asset_transformer::prelude::*;
+use handle_transformer::prelude::*;
 use bevy::{prelude::*, render::render_resource::TextureFormat};
 
 fn main() -> AppExit {
