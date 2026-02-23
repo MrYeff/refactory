@@ -1,5 +1,5 @@
 [workspace]
-members = ["on_asset_loaded", "atlas", "entity_handle", "game", "config_asset"]
+members = ["on_asset_loaded", "atlas", "entity_handle", "game", "config_asset", "registry"]
 resolver = "3"
 
 [profile.dev]
