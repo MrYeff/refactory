@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 bevy = "0.18.0"
-entity_handle = { path = "../entity_handle" }
+entity_handle = { workspace = true }

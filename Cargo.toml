@@ -1,5 +1,12 @@
 [workspace]
-members = ["on_asset_loaded", "atlas", "entity_handle", "game", "config_asset", "registry"]
+members = [
+    "games/game",
+    "shared/on_asset_loaded",
+    "shared/atlas",
+    "shared/entity_handle",
+    "shared/config_asset",
+    "shared/registry",
+]
 resolver = "3"
 
 [profile.dev]
@@ -14,3 +21,10 @@ debug-assertions = false
 [profile.release]
 codegen-units = 1
 lto = "thin"
+
+[workspace.dependencies]
+on_asset_loaded = { path = "shared/on_asset_loaded" }
+atlas = { path = "shared/atlas" }
+entity_handle = { path = "shared/entity_handle" }
+config_asset = { path = "shared/config_asset" }
+registry = { path = "shared/registry" }

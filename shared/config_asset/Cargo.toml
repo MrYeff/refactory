@@ -10,7 +10,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 
 # optional
-on_asset_loaded = { path = "../on_asset_loaded", optional = true }
+on_asset_loaded = { workspace = true, optional = true }
 bevy_common_assets = { version = "0.15.0", optional = true }
 
 [features]
