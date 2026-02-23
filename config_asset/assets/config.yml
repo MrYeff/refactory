@@ -1,0 +1,18 @@
+enemies:
+  aligator:
+    health: 100
+    damage: 10
+    speed: 5
+  ork:
+    health: 150
+    damage: 20
+    speed: 3
+  goblin:
+    health: 50
+    damage: 5
+    speed: 7
+
+colors:
+  - red
+  - green
+  - blue

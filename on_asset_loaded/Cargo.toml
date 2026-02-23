@@ -1,5 +1,5 @@
 [package]
-name = "handle_transformer"
+name = "on_asset_loaded"
 version = "0.1.0"
 edition = "2024"
 

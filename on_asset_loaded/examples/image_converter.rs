@@ -1,10 +1,10 @@
-use handle_transformer::prelude::*;
 use bevy::{prelude::*, render::render_resource::TextureFormat};
+use on_asset_loaded::prelude::*;
 
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(HandleTransformerPlugin)
+        .add_plugins(OnAssetLoadedPlugin)
         .add_systems(Startup, (spawn_camera, setup))
         .run()
 }
@@ -16,17 +16,18 @@ fn spawn_camera(mut commands: Commands) {
 /// 1. load an image from assets
 /// 2. create a grayscale version using the HandleTransformer system param
 /// 3. use handles
-fn setup(
-    asset_server: Res<AssetServer>,
-    mut image_transformer: HandleTransformer<Image>,
-    mut commands: Commands,
-) {
+fn setup(asset_server: Res<AssetServer>, images: Res<Assets<Image>>, mut commands: Commands) {
     let handle_color = asset_server.load("image.png");
 
-    let handle_gray = image_transformer
-        .transform(handle_color.clone(), |input: TransformerInput<Image>| {
-            image_to_grayscale(input.asset)
-        });
+    let handle_gray = images.reserve_handle();
+    commands.on_loaded_with(
+        handle_color.clone(),
+        handle_gray.clone(),
+        |input: OnLoaded<Image, Handle<Image>>, mut images: ResMut<Assets<Image>>| {
+            let img = image_to_grayscale(input.asset);
+            images.insert(input.params.id(), img).unwrap();
+        },
+    );
 
     // use handles while assets arent yet loaded
     spawn_ui(&mut commands, handle_color, handle_gray);
