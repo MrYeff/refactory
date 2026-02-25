@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use config_asset::prelude::*;
+use dyn_node::prelude::*;
 use on_asset_loaded::prelude::*;
 use serde::Deserialize;
 
@@ -10,28 +10,27 @@ struct Enemy {
     speed: u32,
 }
 
-fn main() -> AppExit {
+fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(OnAssetLoadedPlugin)
-        .add_plugins(ConfigAssetLoaderPlugin)
-        .init_asset::<Enemy>()
+        .add_plugins(AssetObserverPlugin)
+        .add_plugins(DynNodePlugin)
+        .init_dyn_asset::<Enemy>()
         .add_systems(Startup, setup)
-        .run()
+        .run();
 }
 
-fn setup(asset_server: Res<AssetServer>, enemies: Res<Assets<Enemy>>, mut commands: Commands) {
-    let h_config = asset_server.load("config.yml");
+fn setup(
+    asset_server: Res<AssetServer>,
+    mut dyn_resolver: DynNodeResolver,
+    mut commands: Commands,
+) {
+    let h_dyn = asset_server.load("config.yml");
 
     ["/enemies/aligator", "/enemies/ork", "/enemies/goblin"]
         .iter()
         .for_each(|path| {
-            let h_enemy = enemies.reserve_handle();
-            commands.on_loaded_with(
-                &h_config,
-                (h_enemy.clone(), path.to_string()),
-                on_loaded_query_extract::<Enemy>,
-            );
+            let h_enemy = dyn_resolver.resolve(h_dyn.clone(), path.to_string());
 
             commands.on_loaded(h_enemy, |input: OnLoaded<Enemy>| {
                 println!(

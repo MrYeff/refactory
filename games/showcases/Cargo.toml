@@ -1,0 +1,8 @@
+[package]
+name = "showcases"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.18" }
+crossbeam-channel = "0.5.15"

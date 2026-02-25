@@ -1,11 +1,12 @@
+use async_service::*;
 use bevy::{prelude::*, render::render_resource::TextureFormat};
-use on_asset_loaded::prelude::*;
+use std::convert::Infallible;
 
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins(AssetObserverPlugin)
-        .add_systems(Startup, (spawn_camera, setup))
+        .add_plugins(AsyncServicePlugin)
+        .add_systems(Startup, (setup, spawn_camera))
         .run()
 }
 
@@ -13,28 +14,35 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn(Camera2d);
 }
 
-/// 1. load an image from assets
-/// 2. create a grayscale version using the HandleTransformer system param
-/// 3. use handles
-fn setup(asset_server: Res<AssetServer>, images: Res<Assets<Image>>, mut commands: Commands) {
-    let handle_color = asset_server.load("image.png");
+fn setup(asset_server: Res<AssetServer>, async_service: Res<AsyncService>, mut commands: Commands) {
+    let handle_color: Handle<Image> = asset_server.load("image.png");
+    let handle_gray: Handle<Image> = asset_server.add_async::<_, Infallible>({
+        let handle_color = handle_color.clone();
+        let asset_server = asset_server.clone();
+        let async_service = async_service.clone();
 
-    let handle_gray = images.reserve_handle();
-    commands.on_loaded_with(
-        handle_color.clone(),
-        handle_gray.clone(),
-        |input: OnLoaded<Image, Handle<Image>>, mut images: ResMut<Assets<Image>>| {
-            let img = image_to_grayscale(input.asset);
-            images.insert(input.params.id(), img).unwrap();
-        },
-    );
+        async move {
+            asset_server.wait_for_asset(&handle_color).await.unwrap();
 
-    // use handles while assets arent yet loaded
+            // Automaticaly runs this system on the next update and then continue
+            let image_gray = async_service
+                .exec_sync(image_to_grayscale, handle_color)
+                .await;
+
+            Ok(image_gray)
+        }
+    });
+
     spawn_ui(&mut commands, handle_color, handle_gray);
 }
 
+fn image_to_grayscale(In(h): In<Handle<Image>>, images: Res<Assets<Image>>) -> Image {
+    let image = images.get(&h).expect("requested image not loaded");
+    image_to_grayscale_converter(image)
+}
+
 /// helper function to convert an image to grayscale by modifying its pixel data on the CPU
-fn image_to_grayscale(image: &Image) -> Image {
+fn image_to_grayscale_converter(image: &Image) -> Image {
     // Convert to a predictable 4-byte-per-pixel format first.
     let mut img = image
         .clone()

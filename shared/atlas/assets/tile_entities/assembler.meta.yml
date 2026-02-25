@@ -1,4 +1,4 @@
 tile_size: [32, 32]
-objects:
+entries:
   assembler:
     size: [2, 2]

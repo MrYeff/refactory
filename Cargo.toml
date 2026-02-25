@@ -1,11 +1,14 @@
 [workspace]
 members = [
-    "games/game",
+    # shared
     "shared/on_asset_loaded",
     "shared/atlas",
     "shared/entity_handle",
-    "shared/config_asset",
+    "shared/dyn_node",
     "shared/registry",
+    # games
+    "games/game",
+    "games/showcases", "shared/async_service",
 ]
 resolver = "3"
 
@@ -26,5 +29,5 @@ lto = "thin"
 on_asset_loaded = { path = "shared/on_asset_loaded" }
 atlas = { path = "shared/atlas" }
 entity_handle = { path = "shared/entity_handle" }
-config_asset = { path = "shared/config_asset" }
+dyn_node = { path = "shared/dyn_node" }
 registry = { path = "shared/registry" }

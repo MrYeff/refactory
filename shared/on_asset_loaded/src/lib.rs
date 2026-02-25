@@ -1,16 +1,15 @@
+pub mod components;
+
+use bevy::{
+    ecs::system::{FromInput, SystemId},
+    platform::collections::HashSet,
+    prelude::*,
+};
 use std::{borrow::Borrow, marker::PhantomData};
 
-use bevy_app::{App, Plugin, PostUpdate};
-use bevy_asset::{Asset, Assets, Handle};
-use bevy_ecs::{
-    component::Component,
-    prelude::{Commands, Entity, IntoSystem, Mut, Resource, World},
-    system::{Command, FromInput, SystemId, SystemInput},
-};
-use bevy_platform::collections::HashSet;
-
 pub mod prelude {
-    pub use super::{OnAssetLoadedExt as _, OnAssetLoadedPlugin, OnLoaded};
+    pub use super::{AppExt as _, AssetObserverPlugin, OnLoaded};
+    pub use crate::components::{AddWhenLoaded, AddWhenLoadedBundle, AssetHandle, AssetLoaded};
 }
 
 /// Actual parameter type received by user processor systems.
@@ -59,21 +58,9 @@ impl<T: 'static, P: 'static> SystemInput for OnLoadedMarker<T, P> {
     }
 }
 
-/// Plugin that provides the [`HandleProcessor`] system param, which can be used to create new handles from existing ones via user-defined asset processor systems.
-/// Systems must have the signature `fn(ProcessorInput<AssetIn, Params>, ...) -> AssetOut`.
-/// `...` can be any valid system params.
-//////
-/// Example Processor System:
-/// ```
-/// fn convert_texture_format(
-///     input: ProcessorInput<Image, TextureFormat>,
-/// ) -> Image {
-///     input.asset.convert(input.params).unwrap()
-/// }
-/// ```
-pub struct OnAssetLoadedPlugin;
+pub struct AssetObserverPlugin;
 
-impl Plugin for OnAssetLoadedPlugin {
+impl Plugin for AssetObserverPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<OnAssetLoadedProcessors>()
             .add_systems(PostUpdate, run_on_asset_loaded_processors);
@@ -81,7 +68,7 @@ impl Plugin for OnAssetLoadedPlugin {
 }
 
 /// System Param used to create new handles from existing ones via an asset processor system. Reference [`HandleProcessorPlugin`] for more information.
-pub trait OnAssetLoadedExt {
+pub trait AppExt {
     fn on_loaded_with<S, C, P, M>(
         &mut self,
         input: impl Borrow<Handle<S>>,
@@ -100,7 +87,7 @@ pub trait OnAssetLoadedExt {
         M: Send + Sync + 'static;
 }
 
-impl<'w, 's> OnAssetLoadedExt for Commands<'w, 's> {
+impl<'w, 's> AppExt for Commands<'w, 's> {
     fn on_loaded_with<S, C, P, M>(&mut self, input: impl Borrow<Handle<S>>, params: P, processor: C)
     where
         S: Asset,

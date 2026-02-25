@@ -1,0 +1,11 @@
+[package]
+name = "async_service"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = { version = "0.18", default-features = false }
+async-channel = "2.5.0"
+
+[dev-dependencies]
+bevy = "0.18"

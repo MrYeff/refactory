@@ -1,5 +1,5 @@
 tile_size: [32, 32]
-objects:
+entries:
   belt:
     animation:
       frame_duration: 0.15

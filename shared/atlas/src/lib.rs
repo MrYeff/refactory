@@ -1,212 +1,343 @@
-mod common_sequences;
-
+mod entries;
+use bevy::ecs::lifecycle::HookContext;
+use bevy::ecs::world::DeferredWorld;
+use bevy::prelude::*;
+use dyn_node::prelude::*;
+use itertools::Itertools as _;
+use on_asset_loaded::prelude::*;
+use registry::prelude::*;
+use serde::{Deserialize, de::DeserializeOwned};
+use serde_with::serde_as;
 use std::sync::Arc;
+use std::time::Duration;
 
-use bevy::scene::SceneSpawnError;
-use bevy::{
-    ecs::entity::EntityHashMap,
-    platform::collections::HashMap,
-    prelude::*,
-    scene::{DynamicEntity, DynamicScene},
-};
+pub struct AtlasPlugin;
 
-use entity_handle::prelude::*;
-
-/*
-Pipeline (direct apply, no spawn):
-
-1) for all AtlasEntry entities missing AtlasHandle:
-      insert AtlasHandle(EntityAssetHandle<AtlasId>)
-
-2) for all Atlas roots missing AtlasSceneHandle:
-      insert AtlasSceneHandle(Handle<DynamicScene>) loaded from AtlasId.0
-
-3) exclusive system:
-      - wait until Assets<DynamicScene> contains the handle
-      - build lookup: (atlas_path, entry_id) -> final_entity
-      - build entity_map: (scene_entity -> final_entity) for every scene entity
-      - if ANY scene entity can't map, do NOT apply (to avoid spawning)
-      - call scene.write_to_world(world, &mut map)
-      - mark AtlasSceneApplied + remove AtlasSceneHandle
-*/
-
-/// Instead of `DynamicSceneRoot`, store the handle and apply it manually.
-#[derive(Debug, Clone, Component)]
-struct AtlasSceneHandle(Handle<DynamicScene>);
-
-/// Marker so we only apply once.
-#[derive(Debug, Clone, Component)]
-struct AtlasSceneApplied;
-
-fn insert_attlas_handles(
-    mut commands: Commands,
-    mut entity_asset_server: EntityAssetServer<AtlasId>,
-    query: Query<(Entity, &AtlasPath), Without<AtlasHandle>>,
-) {
-    for (e, path) in &query {
-        let handle = entity_asset_server.get_asset(AtlasId(path.0.clone()));
-        commands.entity(e).insert(AtlasHandle(handle));
+impl Plugin for AtlasPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins((DynNodePlugin, AssetObserverPlugin))
+            .make_registry::<AtlasEntryId>()
+            .init_dyn_asset::<AtlasEntryDefinition>();
     }
 }
-
-fn insert_attlas_scenes(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    query: Query<(Entity, &AtlasId), Without<AtlasSceneHandle>>,
-) {
-    for (e, atlas) in &query {
-        // AtlasId.0 is the path to your .scn.ron
-        let scene_handle: Handle<DynamicScene> = asset_server.load(atlas.0.to_string());
-        commands.entity(e).insert(AtlasSceneHandle(scene_handle));
-    }
-}
-
-fn apply_atlas_scene_direct_no_spawn(world: &mut World) {
-    // Build lookup for final entities (atlas_path, entry_id) -> Entity
-    let mut final_lookup: HashMap<(Arc<str>, Arc<str>), Entity> = HashMap::default();
-    {
-        let mut q_final = world.query::<(Entity, &AtlasPath, &AtlasEntryId)>();
-        for (e, path, id) in q_final.iter(world) {
-            final_lookup.insert((path.0.clone(), id.0.clone()), e);
-        }
-    }
-
-    // Snapshot roots we want to process (so we don't hold a query borrow while applying)
-    let roots: Vec<(Entity, Arc<str>, Handle<DynamicScene>)> = {
-        let mut out = Vec::new();
-        let mut q_roots = world.query::<(Entity, &AtlasId, &AtlasSceneHandle)>();
-        for (e, atlas_id, scene_handle) in q_roots.iter(world) {
-            if world.entity(e).contains::<AtlasSceneApplied>() {
-                continue;
-            }
-            out.push((e, atlas_id.0.clone(), scene_handle.0.clone()));
-        }
-        out
-    };
-
-    // Now do the apply with split borrows
-    world.resource_scope(|world, scenes: Mut<Assets<DynamicScene>>| {
-        for (root_e, atlas_path, scene_handle) in roots {
-            let Some(scene) = scenes.get(&scene_handle) else {
-                // not loaded yet
-                continue;
-            };
-
-            // Build entity map. To guarantee "no spawn", EVERY scene entity must map.
-            let mut map: EntityHashMap<Entity> = EntityHashMap::default();
-
-            for dyn_ent in scene.entities.iter() {
-                let Some(entry_id) = find_component::<AtlasEntryId>(dyn_ent) else {
-                    warn!(
-                        "Scene `{}` has an entity without AtlasEntryId; skipping to avoid spawning.",
-                        atlas_path
-                    );
-                    map.clear();
-                    break;
-                };
-
-                let key = (atlas_path.clone(), entry_id.0.clone());
-                let Some(&target) = final_lookup.get(&key) else {
-                    warn!(
-                        "Scene `{}` has entry `{}` with no matching final entity; skipping to avoid spawning.",
-                        atlas_path,
-                        entry_id.0
-                    );
-                    map.clear();
-                    break;
-                };
-
-                map.insert(dyn_ent.entity, target);
-            }
-
-            if map.is_empty() {
-                continue;
-            }
-
-            // Apply directly. Because every scene entity is mapped, this won't spawn extras.
-            if let Err(err) = scene.write_to_world(world, &mut map) {
-                warn!("Failed to apply scene `{}`: {:?}", atlas_path, err);
-                continue;
-            }
-
-            // Mark applied and drop handle
-            let mut em = world.entity_mut(root_e);
-            em.insert(AtlasSceneApplied);
-            em.remove::<AtlasSceneHandle>();
-        }
-    });
-}
-
-use bevy::reflect::{PartialReflect, Reflect};
-
-fn find_component<T>(dyn_entity: &DynamicEntity) -> Option<T>
-where
-    T: Reflect + Clone + 'static,
-{
-    for c in &dyn_entity.components {
-        // c: &Box<dyn PartialReflect>
-        let Some(r) = c.try_as_reflect() else {
-            continue;
-        };
-        if let Some(v) = r.downcast_ref::<T>() {
-            return Some(v.clone());
-        }
-    }
-    None
-}
-
-// --------------------- Your types ---------------------
 
 #[derive(Debug, Clone, Component, Hash, PartialEq, Eq)]
-struct AtlasId(Arc<str>);
+#[component(immutable)]
+pub struct AtlasHandle(pub Handle<DynNode>);
 
-#[derive(Debug, Clone, Component, Hash, PartialEq, Eq)]
-struct AtlasPath(Arc<str>);
-
-#[derive(Debug, Clone, Component)]
-struct AtlasHandle(EntityAssetHandle<AtlasId>);
-
-/// This must exist on:
-/// - scene entities in `.scn.ron`
-/// - final entities in your world
-#[derive(Debug, Clone, Component, Reflect, Hash, PartialEq, Eq)]
-#[reflect(Component)]
-struct AtlasEntryId(Arc<str>);
-
-#[derive(Debug, Clone, Component, Reflect)]
-#[reflect(Component)]
-struct AtlasEntryDefinition {
-    tile_size: UVec2,
-    size: UVec2,
-    offset: UVec2,
-}
-
-#[derive(Debug, Clone, Component, Reflect)]
-#[reflect(Component)]
+#[derive(Debug, Clone, Deserialize)]
 struct FrameSequence {
     stride: UVec2,
     count: u32,
 }
 
-impl FrameSequence {
-    fn get_index(&self, frame: u32) -> UVec2 {
+impl GetFrameIndex for FrameSequence {
+    type Param = u32;
+    fn get_frame_index(&self, frame: u32) -> UVec2 {
         let frame = frame % self.count;
         UVec2::new(self.stride.x * frame, self.stride.y * frame)
     }
 }
 
-// --------------------- Plugin wiring ---------------------
+pub trait PathSuffix {
+    const SUFFIX: &'static str;
+}
 
-pub struct AtlasSceneDirectApplyPlugin;
+pub trait GetFrameIndex {
+    type Param;
+    fn get_frame_index(&self, param: Self::Param) -> UVec2;
+}
 
-impl Plugin for AtlasSceneDirectApplyPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (insert_attlas_handles, insert_attlas_scenes).chain(),
-        );
+#[derive(Component)]
+#[relationship(relationship_target=Entries)]
+pub struct Atlas(Entity);
 
-        // Exclusive system to call `DynamicScene::write_to_world`
-        app.add_systems(Update, apply_atlas_scene_direct_no_spawn);
+#[derive(Component)]
+#[relationship_target(relationship=Atlas)]
+#[component(on_remove=Self::on_remove)]
+pub struct Entries(Vec<Entity>);
+
+impl Entries {
+    /// remove when not referenced anymore
+    fn on_remove(mut world: DeferredWorld, ctx: HookContext) {
+        world.commands().entity(ctx.entity).despawn();
+    }
+}
+
+pub mod atlas_entry {
+    use super::*;
+
+    pub(crate) fn load_atlas_entry_component<
+        A: Asset + Component + Clone + DeserializeOwned + PathSuffix,
+    >(
+        to_load: Query<
+            (Entity, &AtlasHandle, &AtlasEntryId),
+            (Without<A>, Without<AddWhenLoaded<A>>),
+        >,
+        mut resolver: DynNodeResolver,
+        mut commands: Commands,
+    ) {
+        to_load
+            .iter()
+            .for_each(|(entity, AtlasHandle(h_atlas), AtlasEntryId(id))| {
+                let h_entry = resolver.resolve::<A>(
+                    h_atlas.clone(),
+                    format!("/entries/{id}{}", A::SUFFIX).to_string(),
+                );
+                commands
+                    .entity(entity)
+                    .insert(AddWhenLoadedBundle::new(h_entry));
+            });
+    }
+
+    #[derive(Debug, Clone, Component, Hash, PartialEq, Eq)]
+    #[component(immutable)]
+    pub struct AtlasEntryId(pub Arc<str>);
+
+    pub mod entries {
+        use super::*;
+
+        #[derive(Debug, Clone, Component, Deserialize, Asset, TypePath)]
+        pub struct AtlasEntryDefinition {
+            pub size: UVec2,
+            pub offset: UVec2,
+        }
+
+        impl GetFrameIndex for AtlasEntryDefinition {
+            type Param = ();
+            fn get_frame_index(&self, _: Self::Param) -> UVec2 {
+                self.offset
+            }
+        }
+
+        #[serde_as]
+        #[derive(Asset, Debug, Clone, Component, TypePath, Deserialize)]
+        pub struct AnimationDefinition {
+            #[serde_as(as = "serde_with::DurationSeconds<u64>")]
+            frame_duration: Duration,
+            seq: FrameSequence,
+        }
+
+        impl GetFrameIndex for AnimationDefinition {
+            type Param = Duration;
+            fn get_frame_index(&self, total_time: Self::Param) -> UVec2 {
+                let frame =
+                    (total_time.as_secs_f32() / self.frame_duration.as_secs_f32()).floor() as u32;
+                self.seq.get_frame_index(frame)
+            }
+        }
+
+        #[derive(Asset, Debug, Clone, Component, TypePath, Deserialize)]
+        pub struct VariantsDefinition {
+            seq: FrameSequence,
+        }
+
+        impl GetFrameIndex for VariantsDefinition {
+            type Param = u32;
+            fn get_frame_index(&self, variant: Self::Param) -> UVec2 {
+                self.seq.get_frame_index(variant)
+            }
+        }
+
+        #[derive(Asset, Debug, Clone, Component, TypePath, Deserialize)]
+        pub struct RotationsDefinition {
+            rotation_count: GridRotations,
+            seq: FrameSequence,
+        }
+
+        impl GetFrameIndex for RotationsDefinition {
+            type Param = u32;
+            fn get_frame_index(&self, rotation: Self::Param) -> UVec2 {
+                let frame = match self.rotation_count {
+                    GridRotations::PerAxis => rotation % 4 / 2,
+                    GridRotations::All => rotation % 4,
+                };
+                self.seq.get_frame_index(frame)
+            }
+        }
+
+        #[derive(Debug, Clone, Deserialize)]
+        #[serde(untagged)]
+        pub enum GridRotations {
+            /// Expects 2 frames: one for 0°+180° and one for 90°+270°
+            #[serde(rename = "per_axis")]
+            PerAxis,
+            /// Expects 4 frames: one for each 90° rotation
+            #[serde(rename = "all")]
+            All,
+        }
+
+        impl PathSuffix for AtlasEntryDefinition {
+            const SUFFIX: &'static str = "";
+        }
+
+        impl PathSuffix for AnimationDefinition {
+            const SUFFIX: &'static str = "/animation";
+        }
+
+        impl PathSuffix for VariantsDefinition {
+            const SUFFIX: &'static str = "/variants";
+        }
+
+        impl PathSuffix for RotationsDefinition {
+            const SUFFIX: &'static str = "/rotations";
+        }
+    }
+}
+
+use atlas_entry::entries::*;
+use atlas_entry::*;
+
+mod atlas {
+
+    use bevy::render::render_resource::{
+        Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureViewDescriptor,
+        TextureViewDimension,
+    };
+
+    use super::*;
+
+    pub(crate) fn load_atlas_component<A: Asset + Component + Clone + DeserializeOwned>(
+        to_load: Query<
+            (Entity, &AtlasHandle),
+            (With<AtlasDefinition>, Without<A>, Without<AddWhenLoaded<A>>),
+        >,
+        mut resolver: DynNodeResolver,
+        mut commands: Commands,
+    ) {
+        to_load.iter().for_each(|(entity, AtlasHandle(h_atlas))| {
+            let h_entry = resolver.resolve::<A>(h_atlas.clone(), "".to_string());
+            commands
+                .entity(entity)
+                .insert(AddWhenLoadedBundle::new(h_entry));
+        });
+    }
+
+    #[derive(Asset, Debug, Clone, Component, TypePath, Deserialize)]
+    pub struct AtlasDefinition {
+        tile_size: UVec2,
+    }
+
+    #[derive(Debug, Clone, Component, TypePath, Deserialize)]
+    #[component(immutable, on_add=Self::on_add)]
+    pub struct SourceImagePath {
+        path: String,
+    }
+
+    impl SourceImagePath {
+        fn on_add(mut world: DeferredWorld, ctx: HookContext) {
+            let entity = ctx.entity;
+            let path = world
+                .entity(entity)
+                .get::<SourceImagePath>()
+                .unwrap()
+                .path
+                .clone();
+            let handle = world.resource::<AssetServer>().load(path);
+            let mut commands = world.commands();
+
+            commands.entity(entity).insert(RawImage(handle.clone()));
+            commands.on_loaded_with(
+                handle.clone(),
+                entity,
+                |input: OnLoaded<Image, Entity>,
+                mut commands: Commands,
+                defs: Query<&AtlasDefinition>,
+                mut images: ResMut<Assets<Image>>| {
+                    let def = defs.get(input.params).unwrap(); // probably should be handled better
+
+                    let (image, original_tile_width) =
+                        tileset_to_stacked(&input.asset, def.tile_size);
+
+                    let h_stack = images.add(image);
+
+                    commands.entity(input.params).insert(StackedImage {
+                        handle: h_stack,
+                        original_tile_width,
+                    });
+                },
+            );
+        }
+    }
+
+    #[derive(Debug, Clone, Component)]
+    pub struct RawImage(Handle<Image>);
+
+    #[derive(Debug, Clone, Component)]
+    pub struct StackedImage {
+        handle: Handle<Image>,
+        original_tile_width: u32,
+    }
+
+    impl StackedImage {
+        pub fn offste_to_idx(&self, offset: UVec2) -> UVec2 {
+            UVec2::new(offset.x / self.original_tile_width, offset.y)
+        }
+    }
+
+    fn tileset_to_stacked(image: &Image, tile_size: UVec2) -> (Image, u32) {
+        assert_eq!(image.texture_descriptor.dimension, TextureDimension::D2);
+        assert_eq!(image.texture_descriptor.size.depth_or_array_layers, 1);
+        assert_eq!(image.height() % tile_size.y, 0);
+        assert_eq!(image.width() % tile_size.x, 0);
+
+        let sheet_w = image.texture_descriptor.size.width;
+        let sheet_h = image.texture_descriptor.size.height;
+
+        let tiles_w = sheet_w / tile_size.x;
+        let tiles_h = sheet_h / tile_size.y;
+
+        let bpp = bytes_per_pixel(image.texture_descriptor.format).unwrap();
+        let data = (&image.data).as_ref().unwrap();
+
+        let mut data_new = Vec::with_capacity(data.len());
+
+        (0..tiles_h)
+            .cartesian_product(0..tiles_w)
+            .for_each(|(ty, tx)| {
+                let src_x0 = tx * tile_size.x;
+                let src_y0 = ty * tile_size.y;
+
+                (0..tile_size.y).for_each(|by| {
+                    let src_px = (src_y0 + by) * sheet_w + src_x0;
+                    let byte_offset = src_px as usize * bpp;
+                    let byte_w = (tile_size.x as usize) * bpp;
+
+                    data_new.extend_from_slice(&data[byte_offset..byte_offset + byte_w]);
+                });
+            });
+
+        (
+            Image {
+                data: Some(data_new),
+                texture_descriptor: TextureDescriptor {
+                    size: Extent3d {
+                        width: tile_size.x,
+                        height: tile_size.y,
+                        depth_or_array_layers: tiles_w * tiles_h,
+                    },
+                    ..image.texture_descriptor
+                },
+                texture_view_descriptor: Some(TextureViewDescriptor {
+                    dimension: Some(TextureViewDimension::D2Array),
+                    ..default()
+                }),
+                ..image.clone()
+            },
+            tiles_h,
+        )
+    }
+
+    fn bytes_per_pixel(format: TextureFormat) -> Option<usize> {
+        use TextureFormat::*;
+        Some(match format {
+            R8Unorm | R8Snorm | R8Uint | R8Sint => 1,
+            Rg8Unorm | Rg8Snorm | Rg8Uint | Rg8Sint => 2,
+            Rgba8Unorm | Rgba8UnormSrgb | Rgba8Snorm | Rgba8Uint | Rgba8Sint | Bgra8Unorm
+            | Bgra8UnormSrgb => 4,
+            Rgba16Float | Rgba16Unorm | Rgba16Snorm | Rgba16Uint | Rgba16Sint => 8,
+            Rgba32Float | Rgba32Uint | Rgba32Sint => 16,
+            _ => return None,
+        })
     }
 }
