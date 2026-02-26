@@ -1,14 +1,12 @@
 [workspace]
 members = [
     # shared
-    "shared/on_asset_loaded",
     "shared/atlas",
-    "shared/entity_handle",
     "shared/dyn_node",
-    "shared/registry",
+    "shared/async_service",
     # games
     "games/game",
-    "games/showcases", "shared/async_service",
+    "games/showcases",
 ]
 resolver = "3"
 
@@ -26,8 +24,6 @@ codegen-units = 1
 lto = "thin"
 
 [workspace.dependencies]
-on_asset_loaded = { path = "shared/on_asset_loaded" }
 atlas = { path = "shared/atlas" }
-entity_handle = { path = "shared/entity_handle" }
 dyn_node = { path = "shared/dyn_node" }
-registry = { path = "shared/registry" }
+async_service = { path = "shared/async_service" }
