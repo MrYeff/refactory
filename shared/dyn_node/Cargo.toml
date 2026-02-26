@@ -8,8 +8,10 @@ bevy = { version = "0.18", default-features = false, features = ["bevy_asset"] }
 derive_more = { version = "2.1.1", features = ["deref", "from"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+thiserror = "2.0.18"
 
 # optional
+async_service = { workspace = true, optional = true }        # , optional = true
 bevy_common_assets = { version = "0.15.0", optional = true }
 
 [features]
@@ -22,4 +24,4 @@ yaml = ["bevy_common_assets/yaml"]
 
 [[example]]
 name = "processor"
-required-features = ["yaml"]
+required-features = ["yaml", "async_service"]
