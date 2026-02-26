@@ -304,8 +304,6 @@ dependencies = [
  "bevy",
  "dyn_node",
  "itertools 0.14.0",
- "on_asset_loaded",
- "registry",
  "serde",
  "serde_with",
 ]
@@ -2326,7 +2324,6 @@ dependencies = [
  "bevy",
  "bevy_common_assets",
  "derive_more",
- "on_asset_loaded",
  "serde",
  "serde_json",
 ]
@@ -2366,14 +2363,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "entity_handle"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "crossbeam-channel",
 ]
 
 [[package]]
@@ -2619,11 +2608,9 @@ dependencies = [
  "bevy_common_assets",
  "bevy_mod_index",
  "derive_more",
- "entity_handle",
  "itertools 0.14.0",
  "log",
  "moonshine-kind",
- "on_asset_loaded",
  "serde",
  "serde_json",
  "serde_with",
@@ -3848,13 +3835,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "on_asset_loaded"
-version = "0.1.0"
-dependencies = [
- "bevy",
-]
-
-[[package]]
 name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4289,14 +4269,6 @@ name = "regex-syntax"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
-
-[[package]]
-name = "registry"
-version = "0.1.0"
-dependencies = [
- "bevy",
- "thiserror 2.0.18",
-]
 
 [[package]]
 name = "renderdoc-sys"

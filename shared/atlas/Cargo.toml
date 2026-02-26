@@ -6,8 +6,6 @@ edition = "2024"
 [dependencies]
 bevy = "0.18.0"
 dyn_node = { workspace = true }
-registry = { workspace = true }
-on_asset_loaded = { workspace = true }
 serde_with = { version = "3.16.1", features = ["time_0_3"] }
 serde = { version = "1.0.228", features = ["derive"] }
 itertools = "0.14.0"
