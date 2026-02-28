@@ -6,7 +6,7 @@ members = [
     "shared/async_service",
     # games
     "games/game",
-    "games/showcases",
+    "games/showcases", "games/space-game", "games/tower-defense",
 ]
 resolver = "3"
 

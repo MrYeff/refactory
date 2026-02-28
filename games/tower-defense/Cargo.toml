@@ -1,0 +1,9 @@
+[package]
+name = "tower-defense"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+avian2d = "0.5.0"
+bevy = { version = "0.18.0", features = ["debug"] }
+derive_more = { version = "2.1.1", features = ["from"] }

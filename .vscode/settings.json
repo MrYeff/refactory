@@ -4,6 +4,24 @@
         "**/.svn": true,
         "**/.hg": true,
         "**/.DS_Store": true,
-        "**/Thumbs.db": true
+        "**/Thumbs.db": true,
+        "[!g]*/**": true,
+        "g[!a]*/**": true,
+        "ga[!m]*/**": true,
+        "gam[!e]*/**": true,
+        "game[!s]*/**": true,
+        "games/[!t]*/**": true,
+        "games/t[!o]*/**": true,
+        "games/to[!w]*/**": true,
+        "games/tow[!e]*/**": true,
+        "games/towe[!r]*/**": true,
+        "games/tower[!-]*/**": true,
+        "games/tower-[!d]*/**": true,
+        "games/tower-d[!e]*/**": true,
+        "games/tower-de[!f]*/**": true,
+        "games/tower-def[!e]*/**": true,
+        "games/tower-defe[!n]*/**": true,
+        "games/tower-defen[!s]*/**": true,
+        "games/tower-defens[!e]*/**": true
     }
 }
