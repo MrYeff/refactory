@@ -20,6 +20,7 @@ pub struct TurretBundle {
     turret: Turret,
     transform: Transform,
     shoot_cd: ShootCooldown,
+    strategy: TargettingStrategy,
 }
 
 impl TurretBundle {
@@ -28,6 +29,7 @@ impl TurretBundle {
         shoot_cd: f32,
         bullet_speed: f32,
         bullet_fac: impl IntoSpawner<BulletParams>,
+        strategy: TargettingStrategy,
     ) -> Self {
         TurretBundle {
             turret: Turret {
@@ -36,6 +38,7 @@ impl TurretBundle {
             },
             transform: Transform::from_translation(pos.extend(0.0)),
             shoot_cd: ShootCooldown(Timer::from_seconds(shoot_cd, TimerMode::Once)),
+            strategy,
         }
     }
 }

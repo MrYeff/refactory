@@ -1,6 +1,5 @@
 #![feature(if_let_guard)]
 
-mod asd;
 mod objects;
 mod plugins;
 mod spawner;
@@ -17,8 +16,11 @@ use crate::objects::player::PlayerBundle;
 use crate::objects::turret::*;
 use crate::objects::unit::*;
 use crate::objects::*;
+use crate::plugins::targeting::AppExt;
+use crate::plugins::targeting::DetectionFilter;
 use crate::plugins::targeting::Target;
 use crate::plugins::targeting::TargetDetectorBundle;
+use crate::plugins::targeting::TargettingStrategy;
 use crate::plugins::*;
 
 fn main() -> AppExit {
@@ -27,6 +29,7 @@ fn main() -> AppExit {
         .add_plugins((PhysicsPlugins::default(), PhysicsDebugPlugin))
         .insert_resource(Gravity(Vec2::ZERO))
         .add_plugins(targeting::plugin)
+        .add_detectiion_filter::<EnemiesFilter>()
         .add_plugins((bullet::plugin, turret::plugin, unit::plugin, player::plugin))
         .add_systems(Startup, (spawn_camera, spawn_scene))
         .add_systems(Update, update_unit_target)
@@ -40,6 +43,20 @@ fn spawn_camera(mut commands: Commands) {
 
 #[derive(Component)]
 struct UnitTargetMarker;
+
+#[derive(Component)]
+struct EnemyMarker;
+
+#[derive(SystemParam)]
+struct EnemiesFilter<'w, 's> {
+    enemies: Query<'w, 's, (), With<EnemyMarker>>,
+}
+
+impl DetectionFilter for EnemiesFilter<'_, '_> {
+    fn is_hit(&self, _detector: Entity, candidate: Entity) -> bool {
+        self.enemies.contains(candidate)
+    }
+}
 
 fn spawn_scene(
     mut commands: Commands,
@@ -76,7 +93,13 @@ fn spawn_scene(
     let spawn_turret = |commands: &mut Commands, pos: Vec2| {
         let turret = commands
             .spawn((
-                TurretBundle::new(pos, 1.0, 500.0, spawn_bullet.clone()),
+                TurretBundle::new(
+                    pos,
+                    1.0,
+                    500.0,
+                    spawn_bullet.clone(),
+                    TargettingStrategy::Nearest,
+                ),
                 MeshMaterial2d(turret_mat.clone()),
                 Mesh2d(turret_mesh.clone()),
             ))
@@ -84,7 +107,7 @@ fn spawn_scene(
 
         commands
             .entity(turret)
-            .with_child(TargetDetectorBundle::new(turret, 200.0));
+            .with_child(TargetDetectorBundle::<EnemiesFilter>::new(turret, 200.0));
     };
 
     let target = commands
@@ -94,8 +117,9 @@ fn spawn_scene(
         ))
         .id();
 
-    let spawn_unit = |commands: &mut Commands, pos: Vec2| {
+    let spawn_enemy = |commands: &mut Commands, pos: Vec2| {
         commands.spawn((
+            EnemyMarker,
             UnitBundle::new(pos, UNIT_RADIUS, 100),
             MeshMaterial2d(enemy_mat.clone()),
             Mesh2d(enemy_mesh.clone()),
@@ -120,7 +144,7 @@ fn spawn_scene(
         (100.0, -300.0),
     ]
     .into_iter()
-    .for_each(|(x, y)| spawn_unit(&mut commands, Vec2::new(x, y)));
+    .for_each(|(x, y)| spawn_enemy(&mut commands, Vec2::new(x, y)));
 }
 
 fn update_unit_target(
