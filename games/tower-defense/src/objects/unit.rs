@@ -4,6 +4,10 @@ use crate::plugins::targeting::*;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
+pub fn plugin(app: &mut App) {
+    app.add_systems(Update, move_towards_target);
+}
+
 #[derive(Component)]
 #[require(CollisionLayers::new(GameLayer::Units, GameLayer::Default | GameLayer::Units | GameLayer::Bullets | GameLayer::TargetDetection))]
 #[require(RigidBody::Dynamic)]
@@ -44,8 +48,4 @@ fn move_towards_target(
             let dir = (target_pos - tf.translation.truncate()).normalize();
             vel.0 = dir * MOVE_SPEED;
         });
-}
-
-pub fn plugin(app: &mut App) {
-    app.add_systems(Update, move_towards_target);
 }

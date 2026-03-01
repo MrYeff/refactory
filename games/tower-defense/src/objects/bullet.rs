@@ -3,6 +3,10 @@ use crate::plugins::physics::*;
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
+pub fn plugin(app: &mut App) {
+    app.add_systems(Update, detect_hit);
+}
+
 #[derive(Component)]
 #[require(RigidBody::Dynamic)]
 #[require(CollisionEventsEnabled)]
@@ -54,14 +58,10 @@ fn detect_hit(
         .read()
         .filter_map(|col| swap(col.collider1, col.collider2))
         .for_each(|(bullet, target)| {
-            commands.entity(bullet.0).despawn();
+            commands.entity(bullet.0).try_despawn();
             commands.trigger(DealDamageEvent {
                 target,
                 damage: bullet.1.damage,
             });
         });
-}
-
-pub fn plugin(app: &mut App) {
-    app.add_systems(Update, detect_hit);
 }

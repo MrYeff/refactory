@@ -38,7 +38,7 @@ impl Health {
         health.current = health.current.saturating_sub(trigger.damage);
 
         if health.current == 0 {
-            commands.entity(trigger.target).despawn();
+            commands.entity(trigger.target).try_despawn();
         }
     }
 }

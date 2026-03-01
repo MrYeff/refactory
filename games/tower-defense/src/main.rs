@@ -1,18 +1,19 @@
 #![feature(if_let_guard)]
 
+mod asd;
 mod objects;
 mod plugins;
 mod spawner;
 
 use avian2d::PhysicsPlugins;
-use avian2d::prelude::Gravity;
-use avian2d::prelude::PhysicsDebugPlugin;
+use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::objects::bullet::*;
+use crate::objects::player::PlayerBundle;
 use crate::objects::turret::*;
 use crate::objects::unit::*;
 use crate::objects::*;
@@ -26,7 +27,7 @@ fn main() -> AppExit {
         .add_plugins((PhysicsPlugins::default(), PhysicsDebugPlugin))
         .insert_resource(Gravity(Vec2::ZERO))
         .add_plugins(targeting::plugin)
-        .add_plugins((bullet::plugin, turret::plugin, unit::plugin))
+        .add_plugins((bullet::plugin, turret::plugin, unit::plugin, player::plugin))
         .add_systems(Startup, (spawn_camera, spawn_scene))
         .add_systems(Update, update_unit_target)
         .add_systems(PostUpdate, draw_target_gizmos)
@@ -48,14 +49,17 @@ fn spawn_scene(
     const TURRET_RADIUS: f32 = 25.0;
     const UNIT_RADIUS: f32 = 15.0;
     const BULLET_RADIUS: f32 = 5.0;
+    const PLAYER_RADIUS: f32 = 20.0;
 
     let turret_mat = materials.add(ColorMaterial::from(Color::from(css::SKY_BLUE)));
     let enemy_mat = materials.add(ColorMaterial::from(Color::from(css::RED)));
     let bullet_mat = materials.add(ColorMaterial::from(Color::from(css::GOLD)));
+    let player_mat = materials.add(ColorMaterial::from(Color::from(css::ALICE_BLUE)));
 
     let turret_mesh = meshes.add(Circle::new(TURRET_RADIUS));
     let enemy_mesh = meshes.add(Circle::new(UNIT_RADIUS));
     let bullet_mesh = meshes.add(Circle::new(BULLET_RADIUS));
+    let player_mesh = meshes.add(Circle::new(PLAYER_RADIUS));
 
     let spawn_bullet = {
         let bullet_mat = bullet_mat.clone();
@@ -72,7 +76,7 @@ fn spawn_scene(
     let spawn_turret = |commands: &mut Commands, pos: Vec2| {
         let turret = commands
             .spawn((
-                TurretBundle::new(pos, 1.0, spawn_bullet),
+                TurretBundle::new(pos, 1.0, 500.0, spawn_bullet.clone()),
                 MeshMaterial2d(turret_mat.clone()),
                 Mesh2d(turret_mesh.clone()),
             ))
@@ -99,7 +103,15 @@ fn spawn_scene(
         ));
     };
 
-    spawn_turret(&mut commands, Vec2::new(0.0, 100.0));
+    commands.spawn((
+        PlayerBundle::new(Vec2::new(0.0, 0.0), PLAYER_RADIUS, 200.0),
+        MeshMaterial2d(player_mat),
+        Mesh2d(player_mesh),
+    ));
+
+    spawn_turret(&mut commands, Vec2::new(-100.0, 100.0));
+    spawn_turret(&mut commands, Vec2::new(200.0, -50.0));
+
     [
         (-100.0, -100.0),
         (-50.0, -150.0),
