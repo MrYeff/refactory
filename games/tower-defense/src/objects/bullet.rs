@@ -1,7 +1,8 @@
-use crate::plugins::health::*;
-use crate::plugins::physics::*;
 use avian2d::prelude::*;
 use bevy::prelude::*;
+
+use crate::plugins::health::*;
+use crate::plugins::physics::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, detect_hit);

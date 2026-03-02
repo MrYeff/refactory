@@ -1,11 +1,13 @@
 use bevy::prelude::*;
 use derive_more::From;
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use thiserror::Error;
 
 pub mod prelude {
-    pub use super::{DynNode, DynNodePlugin};
+    pub use super::DynNode;
+    pub use super::DynNodePlugin;
 }
 
 /// make sure to register after any other asset loaders that are more sepcific than this before this (e.g. ".enemy.yml")

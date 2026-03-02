@@ -1,7 +1,6 @@
-use bevy::{
-    ecs::{lifecycle::HookContext, world::DeferredWorld},
-    prelude::*,
-};
+use bevy::ecs::lifecycle::HookContext;
+use bevy::ecs::world::DeferredWorld;
+use bevy::prelude::*;
 
 #[derive(EntityEvent)]
 pub struct DealDamageEvent {

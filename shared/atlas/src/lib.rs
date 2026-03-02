@@ -1,4 +1,7 @@
 mod entries;
+use std::sync::Arc;
+use std::time::Duration;
+
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::world::DeferredWorld;
 use bevy::prelude::*;
@@ -6,10 +9,9 @@ use dyn_node::prelude::*;
 use itertools::Itertools as _;
 use on_asset_loaded::prelude::*;
 use registry::prelude::*;
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use serde_with::serde_as;
-use std::sync::Arc;
-use std::time::Duration;
 
 pub struct AtlasPlugin;
 
@@ -190,10 +192,12 @@ use atlas_entry::*;
 
 mod atlas {
 
-    use bevy::render::render_resource::{
-        Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureViewDescriptor,
-        TextureViewDimension,
-    };
+    use bevy::render::render_resource::Extent3d;
+    use bevy::render::render_resource::TextureDescriptor;
+    use bevy::render::render_resource::TextureDimension;
+    use bevy::render::render_resource::TextureFormat;
+    use bevy::render::render_resource::TextureViewDescriptor;
+    use bevy::render::render_resource::TextureViewDimension;
 
     use super::*;
 
@@ -241,9 +245,9 @@ mod atlas {
                 handle.clone(),
                 entity,
                 |input: OnLoaded<Image, Entity>,
-                mut commands: Commands,
-                defs: Query<&AtlasDefinition>,
-                mut images: ResMut<Assets<Image>>| {
+                 mut commands: Commands,
+                 defs: Query<&AtlasDefinition>,
+                 mut images: ResMut<Assets<Image>>| {
                     let def = defs.get(input.params).unwrap(); // probably should be handled better
 
                     let (image, original_tile_width) =

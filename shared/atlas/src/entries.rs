@@ -1,8 +1,9 @@
+use std::time::Duration;
+
 use serde::Deserialize;
 use serde_with::serde_as;
 
 use super::*;
-use std::time::Duration;
 
 #[serde_as]
 #[derive(Asset, Debug, Clone, Component, TypePath, Deserialize)]

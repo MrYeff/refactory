@@ -1,8 +1,10 @@
 use std::result::Result;
 
 use async_service::*;
-use bevy::{ecs::system::RunSystemOnce, prelude::*};
-use dyn_node::{QueryError, prelude::*};
+use bevy::ecs::system::RunSystemOnce;
+use bevy::prelude::*;
+use dyn_node::QueryError;
+use dyn_node::prelude::*;
 use serde::Deserialize;
 
 fn main() {

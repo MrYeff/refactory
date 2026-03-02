@@ -1,11 +1,11 @@
-use avian2d::prelude::{mass_properties::components::RecomputeMassProperties, *};
+use avian2d::prelude::mass_properties::components::RecomputeMassProperties;
+use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use crate::plugins::{
-    cary::{Carrying, CaryableFilter},
-    physics::GameLayer,
-    targeting::*,
-};
+use crate::plugins::cary::Carrying;
+use crate::plugins::cary::CaryableFilter;
+use crate::plugins::physics::GameLayer;
+use crate::plugins::targeting::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, (move_player, pickup_or_drop))

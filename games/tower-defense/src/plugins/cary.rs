@@ -1,5 +1,7 @@
+use bevy::ecs::system::SystemParam;
+use bevy::prelude::*;
+
 use crate::plugins::targeting::DetectionFilter;
-use bevy::{ecs::system::SystemParam, prelude::*};
 
 pub fn plugin(app: &mut App) {
     app.add_systems(

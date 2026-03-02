@@ -1,8 +1,9 @@
+use avian2d::prelude::*;
+use bevy::prelude::*;
+
 use crate::plugins::health::*;
 use crate::plugins::physics::*;
 use crate::plugins::targeting::*;
-use avian2d::prelude::*;
-use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, move_towards_target);

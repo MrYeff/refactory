@@ -1,7 +1,10 @@
-use crate::GameTime;
-use crate::plugins::cary::CarriedBy;
-use crate::{objects::bullet::*, plugins::targeting::*, spawner::*};
 use bevy::prelude::*;
+
+use crate::GameTime;
+use crate::objects::bullet::*;
+use crate::plugins::cary::CarriedBy;
+use crate::plugins::targeting::*;
+use crate::spawner::*;
 
 pub fn plugin(app: &mut App) {
     app.add_plugins(render::plugin);
@@ -83,7 +86,8 @@ fn shoot_at_target(
 }
 
 mod render {
-    use bevy::{color::palettes::css, ecs::system::RunSystemOnce};
+    use bevy::color::palettes::css;
+    use bevy::ecs::system::RunSystemOnce;
 
     use super::*;
 

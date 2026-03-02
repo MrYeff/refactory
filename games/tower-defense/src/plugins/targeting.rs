@@ -1,13 +1,15 @@
 use std::marker::PhantomData;
 
-use crate::plugins::physics::*;
 use avian2d::prelude::*;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::query::QueryEntityError;
-use bevy::ecs::system::{StaticSystemParam, SystemParam};
+use bevy::ecs::system::StaticSystemParam;
+use bevy::ecs::system::SystemParam;
 use bevy::ecs::world::DeferredWorld;
 use bevy::platform::collections::HashSet;
 use bevy::prelude::*;
+
+use crate::plugins::physics::*;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(Update, (select_first_target, select_nearest_target));

@@ -1,6 +1,8 @@
-use async_service::*;
-use bevy::{prelude::*, render::render_resource::TextureFormat};
 use std::convert::Infallible;
+
+use async_service::*;
+use bevy::prelude::*;
+use bevy::render::render_resource::TextureFormat;
 
 fn main() -> AppExit {
     App::new()

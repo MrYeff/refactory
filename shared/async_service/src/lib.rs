@@ -1,6 +1,9 @@
-use async_channel::{Receiver, Sender};
-use bevy::{ecs::system::SystemId, prelude::*};
 use std::iter;
+
+use async_channel::Receiver;
+use async_channel::Sender;
+use bevy::ecs::system::SystemId;
+use bevy::prelude::*;
 
 pub struct AsyncServicePlugin;
 
