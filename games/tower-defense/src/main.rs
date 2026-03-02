@@ -4,7 +4,6 @@ mod objects;
 mod plugins;
 mod spawner;
 
-use avian2d::PhysicsPlugins;
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::system::SystemParam;
@@ -16,6 +15,9 @@ use crate::objects::player::PlayerBundle;
 use crate::objects::turret::*;
 use crate::objects::unit::*;
 use crate::objects::*;
+use crate::plugins::cary::Caryable;
+use crate::plugins::cary::CaryableFilter;
+use crate::plugins::physics::GameLayer;
 use crate::plugins::targeting::AppExt;
 use crate::plugins::targeting::DetectionFilter;
 use crate::plugins::targeting::Target;
@@ -26,9 +28,8 @@ use crate::plugins::*;
 fn main() -> AppExit {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_plugins((PhysicsPlugins::default(), PhysicsDebugPlugin))
         .insert_resource(Gravity(Vec2::ZERO))
-        .add_plugins(targeting::plugin)
+        .add_plugins((physics::plugin, targeting::plugin, cary::plugin))
         .add_detectiion_filter::<EnemiesFilter>()
         .add_plugins((bullet::plugin, turret::plugin, unit::plugin, player::plugin))
         .add_systems(Startup, (spawn_camera, spawn_scene))
@@ -63,17 +64,18 @@ fn spawn_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    const TURRET_RADIUS: f32 = 25.0;
+    const TURRET_DETECT_RADIUS: f32 = 200.0;
+    const PLAYER_PICKUP_RADIUS: f32 = 50.0;
+    const PLAYER_MOVE_SPEED: f32 = 300.0;
+
     const UNIT_RADIUS: f32 = 15.0;
     const BULLET_RADIUS: f32 = 5.0;
     const PLAYER_RADIUS: f32 = 20.0;
 
-    let turret_mat = materials.add(ColorMaterial::from(Color::from(css::SKY_BLUE)));
     let enemy_mat = materials.add(ColorMaterial::from(Color::from(css::RED)));
     let bullet_mat = materials.add(ColorMaterial::from(Color::from(css::GOLD)));
     let player_mat = materials.add(ColorMaterial::from(Color::from(css::ALICE_BLUE)));
 
-    let turret_mesh = meshes.add(Circle::new(TURRET_RADIUS));
     let enemy_mesh = meshes.add(Circle::new(UNIT_RADIUS));
     let bullet_mesh = meshes.add(Circle::new(BULLET_RADIUS));
     let player_mesh = meshes.add(Circle::new(PLAYER_RADIUS));
@@ -100,14 +102,18 @@ fn spawn_scene(
                     spawn_bullet.clone(),
                     TargettingStrategy::Nearest,
                 ),
-                MeshMaterial2d(turret_mat.clone()),
-                Mesh2d(turret_mesh.clone()),
+                Collider::circle(20.0), // <--- this
+                Caryable,
+                CollisionLayers::new(GameLayer::SensorTarget, GameLayer::TargetDetection),
             ))
             .id();
 
         commands
             .entity(turret)
-            .with_child(TargetDetectorBundle::<EnemiesFilter>::new(turret, 200.0));
+            .with_child(TargetDetectorBundle::<EnemiesFilter>::new(
+                turret,
+                TURRET_DETECT_RADIUS,
+            ));
     };
 
     let target = commands
@@ -127,11 +133,25 @@ fn spawn_scene(
         ));
     };
 
-    commands.spawn((
-        PlayerBundle::new(Vec2::new(0.0, 0.0), PLAYER_RADIUS, 200.0),
-        MeshMaterial2d(player_mat),
-        Mesh2d(player_mesh),
-    ));
+    let spawn_player = |commands: &mut Commands, pos: Vec2| {
+        let player = commands
+            .spawn((
+                PlayerBundle::new(pos, PLAYER_RADIUS, PLAYER_MOVE_SPEED), // <--- colider in here
+                TargettingStrategy::Nearest,
+                MeshMaterial2d(player_mat),
+                Mesh2d(player_mesh),
+            ))
+            .id();
+
+        commands
+            .entity(player)
+            .with_child(TargetDetectorBundle::<CaryableFilter>::new(
+                player,
+                PLAYER_PICKUP_RADIUS,
+            ));
+    };
+
+    spawn_player(&mut commands, Vec2::new(0.0, 0.0));
 
     spawn_turret(&mut commands, Vec2::new(-100.0, 100.0));
     spawn_turret(&mut commands, Vec2::new(200.0, -50.0));

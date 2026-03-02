@@ -1,8 +1,10 @@
 use crate::GameTime;
+use crate::plugins::cary::CarriedBy;
 use crate::{objects::bullet::*, plugins::targeting::*, spawner::*};
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
+    app.add_plugins(render::plugin);
     app.add_systems(Update, (tick_turrets, shoot_at_target));
 }
 
@@ -54,7 +56,10 @@ fn shoot_at_target(
     // helpers
     get_target_pos: GetTargetPos,
     // queries
-    mut turrets: Query<(&mut ShootCooldown, &Transform, &Target, &Turret)>,
+    mut turrets: Query<
+        (&mut ShootCooldown, &GlobalTransform, &Target, &Turret),
+        Without<CarriedBy>,
+    >,
 ) {
     turrets
         .iter_mut()
@@ -64,7 +69,7 @@ fn shoot_at_target(
         })
         .for_each(|(mut cd, tf, target, turret)| {
             cd.reset();
-            let pos = tf.translation.truncate();
+            let pos = tf.translation().truncate();
             let dir = (target - pos).normalize();
 
             turret.bullet_spawner.spawn(
@@ -75,4 +80,33 @@ fn shoot_at_target(
                 },
             );
         });
+}
+
+mod render {
+    use bevy::{color::palettes::css, ecs::system::RunSystemOnce};
+
+    use super::*;
+
+    pub fn plugin(app: &mut App) {
+        const TURRET_RADIUS: f32 = 25.0;
+
+        let (turret_mat, turret_mesh) = app
+            .world_mut()
+            .run_system_once(
+                |mut materials: ResMut<Assets<ColorMaterial>>, mut meshes: ResMut<Assets<Mesh>>| {
+                    (
+                        materials.add(ColorMaterial::from(Color::from(css::SKY_BLUE))),
+                        meshes.add(Circle::new(TURRET_RADIUS)),
+                    )
+                },
+            )
+            .unwrap();
+
+        app.add_observer(move |tr: On<Add, Turret>, mut commands: Commands| {
+            commands.entity(tr.entity).insert((
+                MeshMaterial2d(turret_mat.clone()),
+                Mesh2d(turret_mesh.clone()),
+            ));
+        });
+    }
 }

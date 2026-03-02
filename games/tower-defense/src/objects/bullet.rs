@@ -10,6 +10,7 @@ pub fn plugin(app: &mut App) {
 #[derive(Component)]
 #[require(RigidBody::Dynamic)]
 #[require(CollisionEventsEnabled)]
+#[require(Sensor)]
 #[require(CollisionLayers::new(GameLayer::Bullets, GameLayer::Default | GameLayer::Units))]
 pub struct Bullet {
     damage: u32,
@@ -21,6 +22,7 @@ pub struct BulletBundle {
     transform: Transform,
     collider: Collider,
     velocity: LinearVelocity,
+    mass_properties: MassPropertiesBundle,
 }
 
 impl BulletBundle {
@@ -30,6 +32,11 @@ impl BulletBundle {
             transform: Transform::from_translation(pos.extend(0.0)),
             collider: Collider::circle(radius),
             velocity: LinearVelocity(vel),
+            mass_properties: MassPropertiesBundle {
+                mass: 1.0.into(),
+                angular_inertia: 1.0.into(),
+                center_of_mass: default(),
+            },
         }
     }
 }

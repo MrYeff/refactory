@@ -14,7 +14,7 @@ pub fn plugin(app: &mut App) {
     app.add_systems(Update, remove_target_if_not_detected);
 }
 
-#[derive(Component, Deref, DerefMut)]
+#[derive(Component, Deref, DerefMut, Debug)]
 #[component(storage = "SparseSet")]
 pub struct Target(pub Entity);
 
@@ -33,8 +33,9 @@ impl<'w, 's> GetTargetPos<'w, 's> {
 pub struct DetectedTargets(HashSet<Entity>);
 
 #[derive(Component, Deref, DerefMut)]
+#[require(Sensor)]
 #[require(CollisionEventsEnabled)]
-#[require(CollisionLayers::new(GameLayer::TargetDetection, GameLayer::Units))]
+#[require(CollisionLayers::new(GameLayer::TargetDetection, GameLayer::Units | GameLayer::SensorTarget))]
 #[component(on_add=Self::on_add)]
 pub struct TargetDetectorOf<F: 'static>(#[deref] Entity, PhantomData<fn() -> F>);
 

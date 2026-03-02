@@ -1,6 +1,10 @@
+use avian2d::prelude::*;
+use bevy::prelude::*;
 use std::ops::BitOr;
 
-use avian2d::prelude::*;
+pub fn plugin(app: &mut App) {
+    app.add_plugins((PhysicsPlugins::default(), PhysicsDebugPlugin));
+}
 
 #[derive(PhysicsLayer, Clone, Copy, Debug, Default)]
 pub enum GameLayer {
@@ -9,6 +13,7 @@ pub enum GameLayer {
     Bullets,
     Units,
     TargetDetection,
+    SensorTarget,
 }
 
 impl BitOr for GameLayer {

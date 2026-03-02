@@ -37,9 +37,9 @@ fn move_towards_target(
     // helpers
     get_target_pos: GetTargetPos,
     // queries
-    mut units: Query<(&mut LinearVelocity, &Transform, &Target)>,
+    mut units: Query<(&mut LinearVelocity, &Transform, &Target), With<Unit>>,
 ) {
-    const MOVE_SPEED: f32 = 100.0;
+    const MOVE_SPEED: f32 = 250.0;
 
     units
         .iter_mut()
