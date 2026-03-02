@@ -3,6 +3,7 @@
 mod objects;
 mod plugins;
 mod spawner;
+mod suspend;
 
 use avian2d::prelude::*;
 use bevy::color::palettes::css;
