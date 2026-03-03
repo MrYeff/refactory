@@ -1,27 +1,29 @@
-use bevy::ecs::system::SystemParam;
+use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use crate::plugins::targeting::DetectionFilter;
-
 pub fn plugin(app: &mut App) {
-    app.add_systems(
-        Update,
-        update_caried_by_position.before(TransformSystems::Propagate),
-    );
+    app.add_systems(Update, apply_carry_force);
 }
 
-#[derive(SystemParam)]
-pub struct CaryableFilter<'w, 's> {
-    caryable: Query<'w, 's, (), With<Caryable>>,
-}
+#[derive(Component)]
+#[require(PhysicsPickable)]
+#[require(RigidBody::Dynamic)]
+pub struct Caryable;
 
-impl DetectionFilter for CaryableFilter<'_, '_> {
-    fn is_hit(&self, _detector: Entity, candidate: Entity) -> bool {
-        self.caryable.contains(candidate)
+#[derive(Component)]
+pub struct CarryStrength(pub f32);
+
+impl Default for CarryStrength {
+    fn default() -> Self {
+        CarryStrength(100.0)
     }
 }
+
 #[derive(Component)]
-pub struct Caryable;
+pub struct CarryInfo {
+    pub target: Vec3,
+    pub grab_point: Vec3,
+}
 
 #[derive(Component)]
 #[relationship_target(relationship=Carrying)]
@@ -29,14 +31,24 @@ pub struct CarriedBy(Entity);
 
 #[derive(Component)]
 #[relationship(relationship_target=CarriedBy)]
+#[require(CarryStrength)]
+#[require(CarryInfo = panic!("req: CarryInfo") as CarryInfo)]
 pub struct Carrying(pub Entity);
 
-fn update_caried_by_position(
-    carier: Query<(&Transform, &Carrying), Without<CarriedBy>>,
-    mut caried: Query<&mut Transform, (With<CarriedBy>, Without<Carrying>)>,
+fn apply_carry_force(
+    carier: Query<(&Carrying, &CarryInfo, &CarryStrength), Without<CarriedBy>>,
+    mut caried: Query<(Forces, &GlobalTransform), (With<CarriedBy>, Without<Carrying>)>,
 ) {
-    carier.iter().for_each(|(carier_tf, c)| {
-        let mut caried_tf = caried.get_mut(c.0).expect("relationship");
-        caried_tf.translation = carier_tf.translation;
+    carier.iter().for_each(|(c, info, strength)| {
+        let (mut forces, tf) = caried.get_mut(c.0).expect("relationship");
+        let carry_point = tf.transform_point(info.grab_point);
+        let delta = info.target - carry_point;
+        let force = if delta.length_squared() <= 1.0 {
+            delta
+        } else {
+            delta.normalize()
+        } * strength.0;
+
+        forces.apply_force_at_point(force, carry_point);
     });
 }

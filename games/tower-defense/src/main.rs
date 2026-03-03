@@ -16,18 +16,17 @@ use crate::objects::turret::*;
 use crate::objects::unit::*;
 use crate::objects::*;
 use crate::plugins::cary::Caryable;
-use crate::plugins::cary::CaryableFilter;
 use crate::plugins::physics::GameLayer;
-use crate::plugins::targeting::AppExt;
-use crate::plugins::targeting::DetectionFilter;
-use crate::plugins::targeting::Target;
-use crate::plugins::targeting::TargetDetectorBundle;
-use crate::plugins::targeting::TargettingStrategy;
+use crate::plugins::targeting::*;
 use crate::plugins::*;
 
 fn main() -> AppExit {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins)
+        .add_plugins(PhysicsPickingPlugin)
+        .insert_resource(PhysicsPickingSettings {
+            require_markers: true,
+        })
         .add_plugins((physics::plugin, targeting::plugin, cary::plugin))
         .add_detectiion_filter::<EnemiesFilter>()
         .add_plugins((bullet::plugin, turret::plugin, unit::plugin, player::plugin))
@@ -45,6 +44,7 @@ fn spawn_camera(mut commands: Commands) {
     commands.spawn((
         Transform::from_xyz(0.0, 50.0, 20.0).with_rotation(Quat::from_rotation_x(-1.3)),
         Camera3d::default(),
+        PhysicsPickable,
     ));
 }
 
@@ -105,7 +105,6 @@ fn spawn_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     const TURRET_DETECT_RADIUS: f32 = 10.0;
-    const PLAYER_PICKUP_RADIUS: f32 = 2.0;
     const PLAYER_MOVE_SPEED: f32 = 10.0;
 
     const UNIT_RADIUS: f32 = 1.0;
@@ -115,10 +114,12 @@ fn spawn_scene(
     let enemy_mat = materials.add(StandardMaterial::from(Color::from(css::RED)));
     let bullet_mat = materials.add(StandardMaterial::from(Color::from(css::GOLD)));
     let player_mat = materials.add(StandardMaterial::from(Color::from(css::ALICE_BLUE)));
+    let box_mat = materials.add(StandardMaterial::from(Color::from(css::DARK_GRAY)));
 
     let enemy_mesh = meshes.add(Capsule3d::new(UNIT_RADIUS, 2.0));
     let bullet_mesh = meshes.add(Sphere::new(BULLET_RADIUS));
     let player_mesh = meshes.add(Capsule3d::new(UNIT_RADIUS, 2.0));
+    let box_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
 
     let spawn_bullet = {
         let bullet_mat = bullet_mat.clone();
@@ -144,7 +145,10 @@ fn spawn_scene(
                 ),
                 Collider::capsule(1.0, 2.0),
                 Caryable,
-                CollisionLayers::new(GameLayer::SensorTarget, GameLayer::TargetDetection),
+                CollisionLayers::new(
+                    GameLayer::SensorTarget | GameLayer::Default,
+                    GameLayer::TargetDetection | GameLayer::Default,
+                ),
             ))
             .id();
 
@@ -171,7 +175,7 @@ fn spawn_scene(
     };
 
     let spawn_player = |commands: &mut Commands, pos: Vec2| {
-        let player = commands
+        commands
             .spawn((
                 PlayerBundle::new(pos, PLAYER_RADIUS, PLAYER_MOVE_SPEED),
                 TargettingStrategy::Nearest,
@@ -179,13 +183,16 @@ fn spawn_scene(
                 Mesh3d(player_mesh),
             ))
             .id();
+    };
 
-        commands
-            .entity(player)
-            .with_child(TargetDetectorBundle::<CaryableFilter>::new(
-                player,
-                PLAYER_PICKUP_RADIUS,
-            ));
+    let spawn_box = |commands: &mut Commands, pos: Vec2| {
+        commands.spawn((
+            Transform::from_translation(Vec3::new(pos.x, 0.5, pos.y)),
+            Collider::cuboid(1.0, 1.0, 1.0),
+            Caryable,
+            MeshMaterial3d(box_mat.clone()),
+            Mesh3d(box_mesh.clone()),
+        ));
     };
 
     spawn_player(&mut commands, Vec2::new(0.0, 0.0));
@@ -202,6 +209,10 @@ fn spawn_scene(
     ]
     .into_iter()
     .for_each(|(x, y)| spawn_enemy(&mut commands, Vec2::new(x, y)));
+
+    [(-5.0, 5.0), (5.0, 5.0), (5.0, -5.0)]
+        .into_iter()
+        .for_each(|(x, y)| spawn_box(&mut commands, Vec2::new(x, y)));
 }
 
 fn update_unit_target(

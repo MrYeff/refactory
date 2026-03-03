@@ -1,3 +1,4 @@
+use avian3d::prelude::LockedAxes;
 use bevy::prelude::*;
 
 use crate::GameTime;
@@ -16,6 +17,7 @@ pub struct ShootCooldown(Timer);
 
 #[derive(Component)]
 #[require(Name::new("Turret"))]
+#[require(LockedAxes = LockedAxes::new().lock_rotation_x().lock_rotation_z())]
 pub struct Turret {
     bullet_spawner: BoxedSpawner<BulletParams>,
     bullet_speed: f32,

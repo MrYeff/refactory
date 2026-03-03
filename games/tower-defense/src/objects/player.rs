@@ -1,15 +1,15 @@
-use avian3d::prelude::mass_properties::components::RecomputeMassProperties;
 use avian3d::prelude::*;
 use bevy::prelude::*;
 
-use crate::plugins::cary::Carrying;
-use crate::plugins::cary::CaryableFilter;
+use crate::GetMouseWorldPos;
+use crate::plugins::cary::*;
 use crate::plugins::physics::GameLayer;
-use crate::plugins::targeting::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(Update, (move_player, pickup_or_drop))
-        .add_detectiion_filter::<CaryableFilter>();
+    app.add_systems(Update, move_player)
+        .add_observer(handle_carry_started)
+        .add_observer(handle_carying_dragged)
+        .add_observer(handle_cary_ended);
 }
 
 #[derive(Component)]
@@ -17,6 +17,7 @@ pub fn plugin(app: &mut App) {
 #[require(CollisionLayers::new(GameLayer::Units, GameLayer::Default | GameLayer::Units | GameLayer::Bullets | GameLayer::TargetDetection))]
 #[require(RigidBody::Dynamic)]
 #[require(LockedAxes = LockedAxes::new().lock_rotation_x().lock_rotation_z())]
+#[require(CarryStrength(200.0))]
 pub struct Player {
     speed: f32,
 }
@@ -61,28 +62,55 @@ fn move_player(
     }
 }
 
-fn pickup_or_drop(
+fn handle_carry_started(
+    tr: On<Pointer<DragStart>>,
     mut commands: Commands,
-    player: Single<(Entity, Has<Carrying>, Option<&Target>), With<Player>>,
-    keys: Res<ButtonInput<KeyCode>>,
+    player: Single<Entity, With<Player>>,
+    carryable: Query<(), (With<Caryable>, Without<CarriedBy>)>,
+    get_mouse_world_pos: GetMouseWorldPos,
 ) {
-    let (player, is_carying, target) = *player;
+    let target = get_mouse_world_pos.run().expect("idk");
 
-    if !keys.just_pressed(KeyCode::KeyE) {
+    if !carryable.contains(tr.entity) {
         return;
     }
 
-    match is_carying {
-        true => {
-            commands
-                .entity(player)
-                .remove::<Carrying>()
-                .insert(RecomputeMassProperties);
-        }
-        false => {
-            if let Some(target) = target {
-                commands.entity(player).insert(Carrying(target.0));
-            }
-        }
+    commands.entity(*player).insert((
+        Carrying(tr.entity),
+        CarryInfo {
+            target: Vec3::new(target.x, 2.0, target.y),
+            grab_point: Vec3::ZERO, // TODO
+        },
+    ));
+}
+
+fn handle_carying_dragged(
+    tr: On<Pointer<Drag>>,
+    carried: Query<&CarriedBy, Without<Carrying>>,
+    mut carrier: Query<&mut CarryInfo, (With<Carrying>, Without<CarriedBy>)>,
+    get_mouse_world_pos: GetMouseWorldPos,
+) {
+    let target = get_mouse_world_pos.run().expect("idk");
+
+    if let Ok(carried_by) = carried.get(tr.entity) {
+        let mut info = carrier
+            .get_mut(*carried_by.collection())
+            .expect("relationship");
+
+        info.target = Vec3::new(target.x, 2.0, target.y);
     }
+}
+
+fn handle_cary_ended(
+    tr: On<Pointer<DragEnd>>,
+    mut commands: Commands,
+    carried: Query<(), With<CarriedBy>>,
+) {
+    if !carried.contains(tr.entity) {
+        return;
+    }
+
+    commands
+        .entity(tr.entity)
+        .remove::<(CarriedBy, CarryInfo)>();
 }
