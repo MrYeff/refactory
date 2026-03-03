@@ -37,6 +37,6 @@ fn update_caried_by_position(
 ) {
     carier.iter().for_each(|(carier_tf, c)| {
         let mut caried_tf = caried.get_mut(c.0).expect("relationship");
-        caried_tf.translation = carier_tf.translation + Vec3::Z * 1.0;
+        caried_tf.translation = carier_tf.translation;
     });
 }

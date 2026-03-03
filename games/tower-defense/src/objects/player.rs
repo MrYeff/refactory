@@ -1,5 +1,5 @@
-use avian2d::prelude::mass_properties::components::RecomputeMassProperties;
-use avian2d::prelude::*;
+use avian3d::prelude::mass_properties::components::RecomputeMassProperties;
+use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use crate::plugins::cary::Carrying;
@@ -13,9 +13,10 @@ pub fn plugin(app: &mut App) {
 }
 
 #[derive(Component)]
+#[require(Name::new("Player"))]
 #[require(CollisionLayers::new(GameLayer::Units, GameLayer::Default | GameLayer::Units | GameLayer::Bullets | GameLayer::TargetDetection))]
 #[require(RigidBody::Dynamic)]
-#[require(LockedAxes = LockedAxes::new().lock_rotation())]
+#[require(LockedAxes = LockedAxes::new().lock_rotation_x().lock_rotation_z())]
 pub struct Player {
     speed: f32,
 }
@@ -32,9 +33,9 @@ impl PlayerBundle {
     pub fn new(pos: Vec2, radius: f32, speed: f32) -> Self {
         PlayerBundle {
             player: Player { speed },
-            collider: Collider::circle(radius),
-            transform: Transform::from_translation(pos.extend(0.0)),
-            velocity: LinearVelocity(Vec2::ZERO),
+            collider: Collider::capsule(radius, 2.0),
+            transform: Transform::from_translation(Vec3::new(pos.x, 0.0, pos.y)),
+            velocity: LinearVelocity(Vec3::ZERO),
         }
     }
 }
@@ -46,16 +47,17 @@ fn move_player(
     let dir = Dir2::new(
         IVec2::new(
             keys.pressed(KeyCode::KeyD) as i32 - keys.pressed(KeyCode::KeyA) as i32,
-            keys.pressed(KeyCode::KeyW) as i32 - keys.pressed(KeyCode::KeyS) as i32,
+            keys.pressed(KeyCode::KeyS) as i32 - keys.pressed(KeyCode::KeyW) as i32,
         )
         .as_vec2(),
     );
 
     if let Ok(dir) = dir {
-        player.0.0 = dir * player.2.speed;
-        // player.1.look_to(dir.extend(0.0), Vec3::Y);
+        player.0.x = dir.x * player.2.speed;
+        player.0.z = dir.y * player.2.speed;
     } else {
-        player.0.0 = Vec2::ZERO;
+        player.0.x = 0.0;
+        player.0.z = 0.0;
     }
 }
 

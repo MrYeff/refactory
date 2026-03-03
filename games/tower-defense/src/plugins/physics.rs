@@ -1,10 +1,11 @@
 use std::ops::BitOr;
 
-use avian2d::prelude::*;
+use avian3d::prelude::*;
 use bevy::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_plugins((PhysicsPlugins::default(), PhysicsDebugPlugin));
+    app.add_plugins(PhysicsPlugins::default())
+        .insert_resource(Gravity(Vec3::new(0.0, -10.0, 0.0)));
 }
 
 #[derive(PhysicsLayer, Clone, Copy, Debug, Default)]

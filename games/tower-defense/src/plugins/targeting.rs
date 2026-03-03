@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use avian2d::prelude::*;
+use avian3d::prelude::*;
 use bevy::ecs::lifecycle::HookContext;
 use bevy::ecs::query::QueryEntityError;
 use bevy::ecs::system::StaticSystemParam;
@@ -26,8 +26,8 @@ pub struct GetTargetPos<'w, 's> {
 }
 
 impl<'w, 's> GetTargetPos<'w, 's> {
-    pub fn run(&self, target: &Target) -> Result<Vec2, QueryEntityError> {
-        self.targets.get(target.0).map(|t| t.translation.truncate())
+    pub fn run(&self, target: &Target) -> Result<Vec3, QueryEntityError> {
+        self.targets.get(target.0).map(|t| t.translation)
     }
 }
 
@@ -78,7 +78,7 @@ impl<F: 'static> TargetDetectorBundle<F> {
     pub fn new(target: Entity, radius: f32) -> Self {
         TargetDetectorBundle {
             target_detector: TargetDetectorOf(target, default()),
-            collider: Collider::circle(radius),
+            collider: Collider::cylinder(radius, 10.0),
         }
     }
 }
@@ -210,7 +210,7 @@ fn select_nearest_target(
                 .iter()
                 .filter_map(|t| get_target_pos.run(&Target(*t)).ok().map(|pos| (t, pos)))
                 .min_by_key(|(_, pos)| {
-                    let dist = (*pos - tf.translation.truncate()).length_squared();
+                    let dist = (*pos - tf.translation).length_squared();
                     (dist * 1000.0) as u32;
                 })
                 .map(|(t, _)| (e, *t))

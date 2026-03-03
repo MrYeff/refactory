@@ -15,6 +15,7 @@ pub fn plugin(app: &mut App) {
 pub struct ShootCooldown(Timer);
 
 #[derive(Component)]
+#[require(Name::new("Turret"))]
 pub struct Turret {
     bullet_spawner: BoxedSpawner<BulletParams>,
     bullet_speed: f32,
@@ -31,7 +32,7 @@ pub struct TurretBundle {
 impl TurretBundle {
     pub fn new(
         pos: Vec2,
-        shoot_cd: f32,
+        shots_per_second: f32,
         bullet_speed: f32,
         bullet_fac: impl IntoSpawner<BulletParams>,
         strategy: TargettingStrategy,
@@ -41,8 +42,8 @@ impl TurretBundle {
                 bullet_spawner: bullet_fac.into_spawner(),
                 bullet_speed,
             },
-            transform: Transform::from_translation(pos.extend(0.0)),
-            shoot_cd: ShootCooldown(Timer::from_seconds(shoot_cd, TimerMode::Once)),
+            transform: Transform::from_translation(Vec3::new(pos.x, 0.0, pos.y)),
+            shoot_cd: ShootCooldown(Timer::from_seconds(1.0 / shots_per_second, TimerMode::Once)),
             strategy,
         }
     }
@@ -72,7 +73,7 @@ fn shoot_at_target(
         })
         .for_each(|(mut cd, tf, target, turret)| {
             cd.reset();
-            let pos = tf.translation().truncate();
+            let pos = tf.translation();
             let dir = (target - pos).normalize();
 
             turret.bullet_spawner.spawn(
@@ -92,15 +93,16 @@ mod render {
     use super::*;
 
     pub fn plugin(app: &mut App) {
-        const TURRET_RADIUS: f32 = 25.0;
+        const TURRET_RADIUS: f32 = 1.0;
 
         let (turret_mat, turret_mesh) = app
             .world_mut()
             .run_system_once(
-                |mut materials: ResMut<Assets<ColorMaterial>>, mut meshes: ResMut<Assets<Mesh>>| {
+                |mut meshes: ResMut<Assets<Mesh>>,
+                 mut materials: ResMut<Assets<StandardMaterial>>| {
                     (
-                        materials.add(ColorMaterial::from(Color::from(css::SKY_BLUE))),
-                        meshes.add(Circle::new(TURRET_RADIUS)),
+                        materials.add(StandardMaterial::from(Color::from(css::SKY_BLUE))),
+                        meshes.add(Capsule3d::new(TURRET_RADIUS, 2.0)),
                     )
                 },
             )
@@ -108,8 +110,8 @@ mod render {
 
         app.add_observer(move |tr: On<Add, Turret>, mut commands: Commands| {
             commands.entity(tr.entity).insert((
-                MeshMaterial2d(turret_mat.clone()),
-                Mesh2d(turret_mesh.clone()),
+                MeshMaterial3d(turret_mat.clone()),
+                Mesh3d(turret_mesh.clone()),
             ));
         });
     }

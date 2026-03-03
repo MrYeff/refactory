@@ -4,7 +4,7 @@ mod objects;
 mod plugins;
 mod spawner;
 
-use avian2d::prelude::*;
+use avian3d::prelude::*;
 use bevy::color::palettes::css;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -26,20 +26,60 @@ use crate::plugins::targeting::TargettingStrategy;
 use crate::plugins::*;
 
 fn main() -> AppExit {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .insert_resource(Gravity(Vec2::ZERO))
+    let mut app = App::new();
+    app.add_plugins(DefaultPlugins)
         .add_plugins((physics::plugin, targeting::plugin, cary::plugin))
         .add_detectiion_filter::<EnemiesFilter>()
         .add_plugins((bullet::plugin, turret::plugin, unit::plugin, player::plugin))
-        .add_systems(Startup, (spawn_camera, spawn_scene))
+        .add_systems(Startup, (spawn_camera, spawn_enviroment, spawn_scene))
         .add_systems(Update, update_unit_target)
-        .add_systems(PostUpdate, draw_target_gizmos)
-        .run()
+        .add_systems(PostUpdate, draw_target_gizmos);
+
+    #[cfg(debug_assertions)]
+    app.add_plugins(debug::plugin);
+
+    app.run()
 }
 
 fn spawn_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
+    commands.spawn((
+        Transform::from_xyz(0.0, 50.0, 20.0).with_rotation(Quat::from_rotation_x(-1.3)),
+        Camera3d::default(),
+    ));
+}
+
+fn spawn_enviroment(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let ground_mesh = meshes.add(Rectangle::new(1000.0, 1000.0));
+    let ground_mat = materials.add(StandardMaterial {
+        base_color: Color::from(css::LIGHT_GRAY),
+        ..default()
+    });
+
+    commands.spawn((
+        Transform::from_xyz(0.0, -1.0, 0.0)
+            .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
+        Collider::cuboid(1000.0, 1000.0, 1.0),
+        RigidBody::Static,
+        CollisionLayers::new(
+            GameLayer::Default,
+            GameLayer::Default | GameLayer::Bullets | GameLayer::Units,
+        ),
+        Mesh3d(ground_mesh),
+        MeshMaterial3d(ground_mat),
+    ));
+
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 6000.0,
+            shadows_enabled: true,
+            ..default()
+        },
+        Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.33, 0.15, 0.0)),
+    ));
 }
 
 #[derive(Component)]
@@ -62,23 +102,23 @@ impl DetectionFilter for EnemiesFilter<'_, '_> {
 fn spawn_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    const TURRET_DETECT_RADIUS: f32 = 200.0;
-    const PLAYER_PICKUP_RADIUS: f32 = 50.0;
-    const PLAYER_MOVE_SPEED: f32 = 300.0;
+    const TURRET_DETECT_RADIUS: f32 = 10.0;
+    const PLAYER_PICKUP_RADIUS: f32 = 2.0;
+    const PLAYER_MOVE_SPEED: f32 = 10.0;
 
-    const UNIT_RADIUS: f32 = 15.0;
-    const BULLET_RADIUS: f32 = 5.0;
-    const PLAYER_RADIUS: f32 = 20.0;
+    const UNIT_RADIUS: f32 = 1.0;
+    const BULLET_RADIUS: f32 = 0.2;
+    const PLAYER_RADIUS: f32 = 1.0;
 
-    let enemy_mat = materials.add(ColorMaterial::from(Color::from(css::RED)));
-    let bullet_mat = materials.add(ColorMaterial::from(Color::from(css::GOLD)));
-    let player_mat = materials.add(ColorMaterial::from(Color::from(css::ALICE_BLUE)));
+    let enemy_mat = materials.add(StandardMaterial::from(Color::from(css::RED)));
+    let bullet_mat = materials.add(StandardMaterial::from(Color::from(css::GOLD)));
+    let player_mat = materials.add(StandardMaterial::from(Color::from(css::ALICE_BLUE)));
 
-    let enemy_mesh = meshes.add(Circle::new(UNIT_RADIUS));
-    let bullet_mesh = meshes.add(Circle::new(BULLET_RADIUS));
-    let player_mesh = meshes.add(Circle::new(PLAYER_RADIUS));
+    let enemy_mesh = meshes.add(Capsule3d::new(UNIT_RADIUS, 2.0));
+    let bullet_mesh = meshes.add(Sphere::new(BULLET_RADIUS));
+    let player_mesh = meshes.add(Capsule3d::new(UNIT_RADIUS, 2.0));
 
     let spawn_bullet = {
         let bullet_mat = bullet_mat.clone();
@@ -86,8 +126,8 @@ fn spawn_scene(
         move |params: BulletParams| {
             (
                 BulletBundle::new(10, BULLET_RADIUS, params.pos, params.vel),
-                MeshMaterial2d(bullet_mat.clone()),
-                Mesh2d(bullet_mesh.clone()),
+                MeshMaterial3d(bullet_mat.clone()),
+                Mesh3d(bullet_mesh.clone()),
             )
         }
     };
@@ -97,12 +137,12 @@ fn spawn_scene(
             .spawn((
                 TurretBundle::new(
                     pos,
-                    1.0,
-                    500.0,
+                    4.0,
+                    20.0,
                     spawn_bullet.clone(),
                     TargettingStrategy::Nearest,
                 ),
-                Collider::circle(20.0), // <--- this
+                Collider::capsule(1.0, 2.0),
                 Caryable,
                 CollisionLayers::new(GameLayer::SensorTarget, GameLayer::TargetDetection),
             ))
@@ -117,18 +157,15 @@ fn spawn_scene(
     };
 
     let target = commands
-        .spawn((
-            Transform::from_translation(Vec3::new(0.0, -100.0, 0.0)),
-            UnitTargetMarker,
-        ))
+        .spawn((Transform::default(), UnitTargetMarker))
         .id();
 
     let spawn_enemy = |commands: &mut Commands, pos: Vec2| {
         commands.spawn((
             EnemyMarker,
             UnitBundle::new(pos, UNIT_RADIUS, 100),
-            MeshMaterial2d(enemy_mat.clone()),
-            Mesh2d(enemy_mesh.clone()),
+            MeshMaterial3d(enemy_mat.clone()),
+            Mesh3d(enemy_mesh.clone()),
             Target(target),
         ));
     };
@@ -136,10 +173,10 @@ fn spawn_scene(
     let spawn_player = |commands: &mut Commands, pos: Vec2| {
         let player = commands
             .spawn((
-                PlayerBundle::new(pos, PLAYER_RADIUS, PLAYER_MOVE_SPEED), // <--- colider in here
+                PlayerBundle::new(pos, PLAYER_RADIUS, PLAYER_MOVE_SPEED),
                 TargettingStrategy::Nearest,
-                MeshMaterial2d(player_mat),
-                Mesh2d(player_mesh),
+                MeshMaterial3d(player_mat),
+                Mesh3d(player_mesh),
             ))
             .id();
 
@@ -153,15 +190,15 @@ fn spawn_scene(
 
     spawn_player(&mut commands, Vec2::new(0.0, 0.0));
 
-    spawn_turret(&mut commands, Vec2::new(-100.0, 100.0));
-    spawn_turret(&mut commands, Vec2::new(200.0, -50.0));
+    spawn_turret(&mut commands, Vec2::new(-10.0, 10.0));
+    spawn_turret(&mut commands, Vec2::new(10.0, -5.0));
 
     [
-        (-100.0, -100.0),
-        (-50.0, -150.0),
-        (0.0, -200.0),
-        (50.0, -250.0),
-        (100.0, -300.0),
+        (-10.0, -10.0),
+        (-5.0, -15.0),
+        (0.0, -20.0),
+        (5.0, -25.0),
+        (10.0, -30.0),
     ]
     .into_iter()
     .for_each(|(x, y)| spawn_enemy(&mut commands, Vec2::new(x, y)));
@@ -180,7 +217,7 @@ fn update_unit_target(
         return;
     };
 
-    target.translation = mouse_pos.extend(0.0);
+    target.translation = Vec3::new(mouse_pos.x, 0.0, mouse_pos.y);
 }
 
 #[derive(SystemParam)]
@@ -193,18 +230,27 @@ impl<'w, 's> GetMouseWorldPos<'w, 's> {
     pub fn run(&self) -> Option<Vec2> {
         let screen_pos = self.window.cursor_position()?;
         let (camera, camera_transform) = *self.camera;
-        Some(
-            camera
-                .viewport_to_world(camera_transform, screen_pos)
-                .ok()?
-                .origin
-                .truncate(),
-        )
+        let ray = camera
+            .viewport_to_world(camera_transform, screen_pos)
+            .ok()?;
+        let ray_dir = ray.direction.as_vec3();
+
+        if ray_dir.y.abs() <= f32::EPSILON {
+            return None;
+        }
+
+        let dist = -ray.origin.y / ray_dir.y;
+        if dist < 0.0 {
+            return None;
+        }
+
+        let world_pos = ray.origin + ray_dir * dist;
+        Some(Vec2::new(world_pos.x, world_pos.z))
     }
 }
 
-fn draw_target_gizmos(targets: Single<&Transform, With<UnitTargetMarker>>, mut gizmos: Gizmos) {
-    gizmos.circle_2d(targets.translation.truncate(), 10.0, Color::WHITE);
+fn draw_target_gizmos(target: Single<&Transform, With<UnitTargetMarker>>, mut gizmos: Gizmos) {
+    gizmos.sphere(target.translation, 0.5, css::RED);
 }
 
 type GameTime = Time;

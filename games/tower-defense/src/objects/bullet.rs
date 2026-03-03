@@ -1,4 +1,4 @@
-use avian2d::prelude::*;
+use avian3d::prelude::*;
 use bevy::prelude::*;
 
 use crate::plugins::health::*;
@@ -9,7 +9,8 @@ pub fn plugin(app: &mut App) {
 }
 
 #[derive(Component)]
-#[require(RigidBody::Dynamic)]
+#[require(Name::new("Bullet"))]
+#[require(RigidBody::Kinematic)]
 #[require(CollisionEventsEnabled)]
 #[require(Sensor)]
 #[require(CollisionLayers::new(GameLayer::Bullets, GameLayer::Default | GameLayer::Units))]
@@ -23,28 +24,22 @@ pub struct BulletBundle {
     transform: Transform,
     collider: Collider,
     velocity: LinearVelocity,
-    mass_properties: MassPropertiesBundle,
 }
 
 impl BulletBundle {
-    pub fn new(damage: u32, radius: f32, pos: Vec2, vel: Vec2) -> Self {
+    pub fn new(damage: u32, radius: f32, pos: Vec3, vel: Vec3) -> Self {
         BulletBundle {
             bullet: Bullet { damage },
-            transform: Transform::from_translation(pos.extend(0.0)),
-            collider: Collider::circle(radius),
+            transform: Transform::from_translation(pos),
+            collider: Collider::sphere(radius),
             velocity: LinearVelocity(vel),
-            mass_properties: MassPropertiesBundle {
-                mass: 1.0.into(),
-                angular_inertia: 1.0.into(),
-                center_of_mass: default(),
-            },
         }
     }
 }
 
 pub struct BulletParams {
-    pub pos: Vec2,
-    pub vel: Vec2,
+    pub pos: Vec3,
+    pub vel: Vec3,
 }
 
 fn detect_hit(
