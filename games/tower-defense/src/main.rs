@@ -175,14 +175,12 @@ fn spawn_scene(
     };
 
     let spawn_player = |commands: &mut Commands, pos: Vec2| {
-        commands
-            .spawn((
-                PlayerBundle::new(pos, PLAYER_RADIUS, PLAYER_MOVE_SPEED),
-                TargettingStrategy::Nearest,
-                MeshMaterial3d(player_mat),
-                Mesh3d(player_mesh),
-            ))
-            .id();
+        commands.spawn((
+            PlayerBundle::new(pos, PLAYER_RADIUS, PLAYER_MOVE_SPEED),
+            TargettingStrategy::Nearest,
+            MeshMaterial3d(player_mat),
+            Mesh3d(player_mesh),
+        ));
     };
 
     let spawn_box = |commands: &mut Commands, pos: Vec2| {
