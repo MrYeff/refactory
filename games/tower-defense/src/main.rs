@@ -11,11 +11,11 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::objects::bullet::*;
-use crate::objects::player::PlayerBundle;
+use crate::objects::player::character::PlayerBundle;
 use crate::objects::turret::*;
 use crate::objects::unit::*;
 use crate::objects::*;
-use crate::plugins::cary::Caryable;
+use crate::plugins::cary::Carryable;
 use crate::plugins::physics::GameLayer;
 use crate::plugins::targeting::*;
 use crate::plugins::*;
@@ -144,7 +144,7 @@ fn spawn_scene(
                     TargettingStrategy::Nearest,
                 ),
                 Collider::capsule(1.0, 2.0),
-                Caryable,
+                Carryable,
                 CollisionLayers::new(
                     GameLayer::SensorTarget | GameLayer::Default,
                     GameLayer::TargetDetection | GameLayer::Default,
@@ -187,7 +187,7 @@ fn spawn_scene(
         commands.spawn((
             Transform::from_translation(Vec3::new(pos.x, 0.5, pos.y)),
             Collider::cuboid(1.0, 1.0, 1.0),
-            Caryable,
+            Carryable,
             MeshMaterial3d(box_mat.clone()),
             Mesh3d(box_mesh.clone()),
         ));
