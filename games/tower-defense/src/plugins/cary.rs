@@ -1,8 +1,26 @@
 use avian3d::prelude::*;
 use bevy::prelude::*;
+use bevy_inspector_egui::prelude::*;
 
 pub fn plugin(app: &mut App) {
-    app.add_observer(handle_carry_started);
+    app.add_observer(handle_carry_started)
+        .init_resource::<CarryConfig>();
+}
+
+#[derive(Reflect, Resource, InspectorOptions)]
+#[reflect(Resource, InspectorOptions)]
+pub struct CarryConfig {
+    pub compliance: f32,
+    pub damping_linear: f32,
+}
+
+impl Default for CarryConfig {
+    fn default() -> Self {
+        CarryConfig {
+            compliance: 0.02,
+            damping_linear: 2.0,
+        }
+    }
 }
 
 #[derive(Bundle)]
@@ -52,20 +70,17 @@ fn handle_carry_started(
     tr: On<Add, Carrying>,
     mut commands: Commands,
     carry: Query<(&Carry, &Carrying)>,
+    cfg: Res<CarryConfig>,
 ) {
-    const COMPLIANCE: f32 = 0.002; // 0 = rigid, larger = softer spring
-    const DAMPING_LINEAR: f32 = 0.25; // larger = less oscillation
-    const RES_LEN: f32 = 0.0;
-
     let (carry, carrying) = carry.get(tr.entity).expect("relationship");
 
     commands.entity(tr.entity).with_child((
         DistanceJoint::new(tr.entity, carrying.0)
-            .with_limits(RES_LEN, RES_LEN)
-            .with_compliance(COMPLIANCE)
+            .with_limits(0.0, 0.0)
+            .with_compliance(cfg.compliance)
             .with_local_anchor2(carry.handlet_at),
         JointDamping {
-            linear: DAMPING_LINEAR,
+            linear: cfg.damping_linear,
             angular: 0.0,
         },
     ));
